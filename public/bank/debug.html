@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>بنك الحظ - وضع الاختبار</title>
+<style>
+  /* Debug page only: plain styling. The real design comes in phase B3. */
+  body { font-family: system-ui, "Segoe UI", Tahoma, sans-serif; margin: 0; padding: 12px; background: #123840; color: #eef4f3; font-size: 14px; }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  h3 { margin: 4px 0; font-size: 15px; }
+  button, select, input { font: inherit; padding: 6px 10px; margin: 2px; border-radius: 8px; border: 1px solid #d9a441; background: #0b2529; color: #eef4f3; min-height: 36px; }
+  button.primary { background: #d9a441; color: #1f2430; }
+  button:disabled { opacity: .4; }
+  input { width: 90px; }
+  .box { background: #0b2529; border-radius: 10px; padding: 8px 12px; margin: 8px 0; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 12px; align-items: start; }
+  @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } }
+  .board { display: grid; grid-template-columns: repeat(11, minmax(0, 1fr)); grid-template-rows: repeat(11, 64px); gap: 2px; direction: ltr; }
+  .cell { background: #fbf6ea; color: #1f2430; border-radius: 4px; font-size: 10px; padding: 2px; overflow: hidden; position: relative; line-height: 1.2; direction: rtl; }
+  .cell .band { height: 8px; border-radius: 2px; margin-bottom: 2px; }
+  .cell .own { font-weight: 700; }
+  .cell .tok { position: absolute; bottom: 2px; left: 2px; display: flex; gap: 1px; flex-wrap: wrap; }
+  .cell .tok span { width: 12px; height: 12px; border-radius: 50%; border: 1px solid #000; }
+  .cell.mort { opacity: .55; }
+  .cell .idx { position: absolute; top: 1px; left: 3px; color: #888; }
+  .center { grid-column: 2 / 11; grid-row: 2 / 11; background: #1d5560; border-radius: 8px; padding: 10px; color: #eef4f3; overflow: auto; font-size: 13px; }
+  .players { display: grid; gap: 6px; }
+  .pl { background: #123840; border-radius: 8px; padding: 6px 8px; border: 2px solid transparent; }
+  .pl.cur { border-color: #d9a441; }
+  .pl.out { opacity: .4; }
+  .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: middle; margin-inline-end: 4px; border: 1px solid #000; }
+  .log { max-height: 260px; overflow: auto; font-size: 12px; color: #9db6b8; }
+  .err { color: #ff8f88; font-weight: 700; }
+  .hint { color: #d9a441; font-weight: 700; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+</style>
+</head>
+<body>
+<h1>بنك الحظ - وضع الاختبار (كل المقاعد في هذه الصفحة)</h1>
+<div id="fatal" class="err" hidden></div>
+<div class="box row">
+  عدد اللاعبين: <select id="count"></select>
+  البذرة: <input id="seed" type="number" placeholder="عشوائي">
+  <button class="primary" id="start">لعبة جديدة</button>
+  <label class="row"><input type="checkbox" id="fixDice" style="width:auto"> نرد محدد:</label>
+  <input id="d1" type="number" min="1" max="6" value="3" style="width:56px"> <input id="d2" type="number" min="1" max="6" value="4" style="width:56px">
+</div>
+<div class="layout">
+  <div class="box"><div class="board" id="board"></div></div>
+  <div>
+    <div class="box" id="status"></div>
+    <div class="box" id="actions"></div>
+    <div class="box" id="manage"></div>
+    <div class="box" id="trade"></div>
+    <div class="box"><h3>السجل</h3><div class="log" id="log"></div></div>
+  </div>
+</div>
+
+<!-- relative paths: work both through npm start and when opened directly as a file -->
+<script src="../../server/games/bank/config.js"></script>
+<script src="../../server/games/bank/board.js"></script>
+<script src="../../server/games/bank/cards.js"></script>
+<script src="../../server/games/bank/engine.js"></script>
+<script>
+(function () {
+  if (typeof BankEngine === 'undefined') {
+    const f = document.getElementById('fatal');
+    f.hidden = false;
+    f.textContent = 'تعذر تحميل ملفات المحرك. شغّل الخادم بالأمر npm start وافتح http://localhost:3000/bank/debug.html';
+    return;
+  }
+  const E = BankEngine, B = BankBoard, C = BankConfig;
+  const $ = (id) => document.getElementById(id);
+  const NAMES = ['أحمد', 'سارة', 'علي', 'ليلى', 'عمر', 'نور'];
+  const COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f1c40f', '#9b59b6', '#ecf0f1'];
+  const GROUP_COLORS = ['', '#8b5a2b', '#7fd3f7', '#e84393', '#f39c12', '#e74c3c', '#f1c40f', '#27ae60', '#2c3e9e'];
+  let s = null;
+  let ids = [];
+  let message = '';
+
+  for (let n = C.MIN_PLAYERS; n <= C.MAX_PLAYERS; n++) $('count').add(new Option(n, n, false, n === 3));
+
+  const nameOf = (id) => NAMES[ids.indexOf(id)] || (id === null ? 'البنك' : id);
+  const colorOf = (id) => COLORS[ids.indexOf(id)] || '#999';
+  const money = (k) => (k * 1000).toLocaleString('en-US') + ' د.ع';
+  const sqName = (i) => B.SQUARES[i].name;
+
+  function log(t) { const d = document.createElement('div'); d.textContent = t; $('log').prepend(d); }
+
+  function describe(e) {
+    const p = e.playerId ? nameOf(e.playerId) : '';
+    switch (e.type) {
+      case 'turn': return '— دور ' + p;
+      case 'roll': return p + ' رمى ' + e.dice[0] + ' و ' + e.dice[1] + (e.reason === 'utility' ? ' (للمرفق)' : '');
+      case 'move': return p + (e.back ? ' رجع إلى ' : ' وصل إلى ') + sqName(e.to);
+      case 'salary': return p + ' مرّ بانطلاق واستلم ' + money(e.amount);
+      case 'offer_buy': return p + ' يقدر يشتري ' + sqName(e.square) + ' بـ ' + money(e.price);
+      case 'buy': return p + ' اشترى ' + sqName(e.square);
+      case 'auction_start': return 'مزاد على ' + sqName(e.square);
+      case 'bid': return p + ' زايد ' + money(e.amount);
+      case 'auction_won': return p + ' ربح المزاد بـ ' + money(e.amount);
+      case 'auction_none': return 'لم يزايد أحد، بقي العقار للبنك';
+      case 'rent': return p + ' عليه إيجار ' + money(e.amount) + ' لـ ' + nameOf(e.to);
+      case 'pay': return p + ' دفع ' + money(e.amount) + ' إلى ' + nameOf(e.to);
+      case 'debt': return p + ' لا يكفي رصيده لدفع ' + money(e.amount) + ' — دين';
+      case 'card': return p + ' سحب ' + (e.deck === 'chance' ? 'حظ' : 'صندوق') + ': ' + e.text;
+      case 'jail': return p + ' ذهب إلى السجن';
+      case 'speeding': return p + ' رمى 3 دبل متتالية';
+      case 'jail_out': return p + ' خرج من السجن (' + e.how + ')';
+      case 'again': return p + ' يلعب مرة أخرى (دبل)';
+      case 'build': return p + ' بنى في ' + sqName(e.square) + ' (' + (e.houses === 5 ? 'فندق' : e.houses + ' بيت') + ')';
+      case 'sell_building': return p + ' باع بناءً في ' + sqName(e.square);
+      case 'mortgage': return p + ' رهن ' + sqName(e.square);
+      case 'unmortgage': return p + ' فك رهن ' + sqName(e.square);
+      case 'trade_offer': return nameOf(e.trade.from) + ' عرض تبادلاً على ' + nameOf(e.trade.to);
+      case 'trade_done': return 'تم التبادل';
+      case 'trade_rejected': return 'رُفض التبادل';
+      case 'trade_cancelled': return 'أُلغي التبادل';
+      case 'trade_expired': return 'انتهت مهلة التبادل';
+      case 'bankrupt': return p + ' أفلس لصالح ' + nameOf(e.to);
+      case 'game_over': return 'انتهت اللعبة. الفائز: ' + e.winnerIds.map(nameOf).join(' و ');
+      default: return e.type;
+    }
+  }
+
+  function apply(r) {
+    if (r.error) { message = r.error; render(); return; }
+    message = '';
+    s = r.state;
+    r.events.forEach((e) => log(describe(e)));
+    render();
+  }
+
+  function act(pid, action) {
+    if ($('fixDice').checked && (action.type === 'roll')) {
+      s = JSON.parse(JSON.stringify(s));
+      s.forcedDice = [Number($('d1').value), Number($('d2').value)];
+    }
+    apply(E.act(s, pid, action));
+  }
+
+  function start() {
+    const n = Number($('count').value);
+    ids = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6'].slice(0, n);
+    const seed = $('seed').value === '' ? undefined : Number($('seed').value);
+    s = E.createGame(ids, { seed: seed }).state;
+    $('log').textContent = '';
+    message = '';
+    log('لعبة جديدة بـ ' + n + ' لاعبين');
+    render();
+  }
+
+  // board position (0..39) -> grid cell, GO at bottom-right like a real board
+  function cellOf(i) {
+    if (i <= 10) return { r: 11, c: 11 - i };
+    if (i <= 20) return { r: 11 - (i - 10), c: 1 };
+    if (i <= 30) return { r: 1, c: 1 + (i - 20) };
+    return { r: 1 + (i - 30), c: 11 };
+  }
+
+  function renderBoard() {
+    const b = $('board');
+    b.innerHTML = '';
+    B.SQUARES.forEach((q, i) => {
+      const pos = cellOf(i);
+      const d = document.createElement('div');
+      const pr = s.props[i];
+      d.className = 'cell' + (pr && pr.mortgaged ? ' mort' : '');
+      d.style.gridRow = pos.r;
+      d.style.gridColumn = pos.c;
+      let html = '<span class="idx">' + i + '</span>';
+      if (q.group) html += '<div class="band" style="background:' + GROUP_COLORS[q.group] + '"></div>';
+      html += '<div>' + q.name + '</div>';
+      if (q.price) html += '<div>' + q.price + '</div>';
+      if (q.amount) html += '<div>ضريبة ' + q.amount + '</div>';
+      if (pr && pr.owner) {
+        html += '<div class="own" style="color:' + colorOf(pr.owner) + ';text-shadow:0 0 1px #000">' + nameOf(pr.owner) +
+          (pr.houses ? ' · ' + (pr.houses === 5 ? 'فندق' : pr.houses + 'ب') : '') + (pr.mortgaged ? ' · مرهون' : '') + '</div>';
+      }
+      const here = ids.filter((id) => !s.players[id].bankrupt && s.players[id].pos === i);
+      if (here.length) html += '<div class="tok">' + here.map((id) => '<span title="' + nameOf(id) + '" style="background:' + colorOf(id) + '"></span>').join('') + '</div>';
+      d.innerHTML = html;
+      b.append(d);
+    });
+    const center = document.createElement('div');
+    center.className = 'center';
+    const cur = s.phase === 'turn' ? s.playerIds[s.current] : null;
+    center.innerHTML = '<div><b>المرحلة:</b> ' + (s.phase === 'gameOver' ? 'انتهت' : s.stage) + (cur ? ' · <b>الدور:</b> ' + nameOf(cur) : '') +
+      (s.dice ? ' · <b>النرد:</b> ' + s.dice.join(' + ') : '') + '</div>' +
+      '<div>بيوت البنك: ' + s.bankHouses + ' · فنادق البنك: ' + s.bankHotels + '</div>' +
+      (s.lastCard ? '<div><b>آخر بطاقة:</b> ' + BankCards.byId[s.lastCard.id].text + '</div>' : '') +
+      (s.auction ? '<div class="hint">مزاد على ' + sqName(s.auction.square) + ': أعلى عرض ' + (s.auction.bidder ? money(s.auction.bid) + ' (' + nameOf(s.auction.bidder) + ')' : 'لا أحد') + '</div>' : '') +
+      (s.debts.length ? '<div class="err">دين: ' + nameOf(s.debts[0].debtor) + ' عليه ' + money(s.debts[0].amount) + ' لـ ' + nameOf(s.debts[0].creditor) + '</div>' : '') +
+      (s.trade ? '<div class="hint">عرض تبادل من ' + nameOf(s.trade.from) + ' إلى ' + nameOf(s.trade.to) + ': يعطي ' + sideText(s.trade.give) + ' مقابل ' + sideText(s.trade.get) + '</div>' : '') +
+      (s.winnerIds ? '<div class="hint">الفائز: ' + s.winnerIds.map(nameOf).join(' و ') + '</div>' : '');
+    b.append(center);
+  }
+
+  function sideText(side) {
+    const parts = side.props.map(sqName);
+    if (side.cash) parts.push(money(side.cash));
+    if (side.jailCards) parts.push(side.jailCards + ' بطاقة سجن');
+    return parts.length ? parts.join('، ') : 'لا شيء';
+  }
+
+  function btn(label, fn, primary, disabled) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    if (primary) b.className = 'primary';
+    b.disabled = !!disabled;
+    b.onclick = fn;
+    return b;
+  }
+
+  function renderStatus() {
+    const box = $('status');
+    box.innerHTML = '<h3>اللاعبون</h3>' + (message ? '<div class="err">' + message + '</div>' : '');
+    const list = document.createElement('div');
+    list.className = 'players';
+    const cur = s.phase === 'turn' ? s.playerIds[s.current] : null;
+    s.playerIds.forEach((id) => {
+      const p = s.players[id];
+      const owned = Object.keys(s.props).filter((i) => s.props[i].owner === id).map(Number);
+      const d = document.createElement('div');
+      d.className = 'pl' + (id === cur ? ' cur' : '') + (p.bankrupt ? ' out' : '');
+      d.innerHTML = '<span class="dot" style="background:' + colorOf(id) + '"></span><b>' + nameOf(id) + '</b> · ' + money(p.cash) +
+        ' · الثروة ' + money(E.netWorth(s, id)) + (p.inJail ? ' · <span class="err">في السجن (' + p.jailTurns + ')</span>' : '') +
+        (p.jailCards.length ? ' · بطاقات سجن: ' + p.jailCards.length : '') + (p.bankrupt ? ' · مفلس' : '') +
+        '<div style="font-size:12px;color:#9db6b8">' + (owned.length ? owned.map((i) => i + ':' + sqName(i)).join('، ') : 'بلا عقارات') + '</div>';
+      list.append(d);
+    });
+    box.append(list);
+  }
+
+  function renderActions() {
+    const box = $('actions');
+    box.innerHTML = '<h3>الحركات</h3>';
+    if (s.phase !== 'turn') {
+      box.append(btn('لعبة جديدة', start, true));
+      return;
+    }
+    const cur = s.playerIds[s.current];
+    const p = s.players[cur];
+    const row = document.createElement('div');
+    row.className = 'row';
+    if (s.stage === 'roll') {
+      row.append(btn('ارمِ النرد (' + nameOf(cur) + ')', () => act(cur, { type: 'roll' }), true));
+      if (p.inJail) {
+        row.append(btn('ادفع ' + C.JAIL_FINE + ' واخرج', () => act(cur, { type: 'pay_jail' })));
+        row.append(btn('استعمل بطاقة الخروج', () => act(cur, { type: 'use_jail_card' }), false, !p.jailCards.length));
+      }
+    } else if (s.stage === 'buy') {
+      const q = B.SQUARES[s.pending.square];
+      row.append(btn('اشترِ ' + q.name + ' بـ ' + q.price, () => act(cur, { type: 'buy' }), true));
+      row.append(btn('ارفض (مزاد)', () => act(cur, { type: 'decline' })));
+    } else if (s.stage === 'auction') {
+      const who = document.createElement('select');
+      s.playerIds.filter((id) => !s.players[id].bankrupt).forEach((id) => who.add(new Option(nameOf(id), id)));
+      const amt = document.createElement('input');
+      amt.type = 'number';
+      amt.value = (s.auction.bid || 0) + C.AUCTION_MIN_INCREMENT;
+      row.append('المزايد:', who, 'المبلغ:', amt, btn('زايد', () => act(who.value, { type: 'bid', amount: Number(amt.value) }), true));
+      row.append(btn('(انتهى الوقت) أغلق المزاد', () => apply(E.closeAuction(s))));
+    } else if (s.stage === 'debt') {
+      const d = s.debts[0];
+      row.append(btn(nameOf(d.debtor) + ': ادفع الدين', () => act(d.debtor, { type: 'pay_debt' }), true));
+      row.append(btn(nameOf(d.debtor) + ': أعلن الإفلاس', () => act(d.debtor, { type: 'declare_bankruptcy' })));
+    } else if (s.stage === 'postRoll') {
+      row.append(btn('أنهِ الدور', () => act(cur, { type: 'end_turn' }), true));
+    }
+    box.append(row);
+    const timers = document.createElement('div');
+    timers.className = 'row';
+    timers.append(btn('(مؤقت انتهى) لعب تلقائي', () => apply(E.autoPlay(s))));
+    timers.append(btn('المضيف: إنهاء اللعبة الآن', () => { if (confirm('إنهاء اللعبة؟ يفوز الأغنى.')) apply(E.endGameEarly(s)); }));
+    box.append(timers);
+  }
+
+  function playerSelect() {
+    const sel = document.createElement('select');
+    s.playerIds.filter((id) => !s.players[id].bankrupt).forEach((id) => sel.add(new Option(nameOf(id), id)));
+    return sel;
+  }
+
+  function renderManage() {
+    const box = $('manage');
+    box.innerHTML = '<h3>إدارة العقارات (أي لاعب)</h3>';
+    if (s.phase !== 'turn') return;
+    const who = playerSelect();
+    const sq = document.createElement('select');
+    const fill = () => {
+      sq.innerHTML = '';
+      Object.keys(s.props).map(Number).filter((i) => s.props[i].owner === who.value)
+        .forEach((i) => sq.add(new Option(i + ': ' + sqName(i) + (s.props[i].houses ? ' (' + s.props[i].houses + ')' : '') + (s.props[i].mortgaged ? ' مرهون' : ''), i)));
+    };
+    who.onchange = fill;
+    fill();
+    const row = document.createElement('div');
+    row.className = 'row';
+    const a = (type) => () => act(who.value, { type: type, square: Number(sq.value) });
+    row.append(who, sq, btn('ابنِ', a('build')), btn('بع بناء', a('sell_building')), btn('ارهن', a('mortgage')), btn('فك الرهن', a('unmortgage')));
+    box.append(row);
+  }
+
+  function renderTrade() {
+    const box = $('trade');
+    box.innerHTML = '<h3>التبادل</h3>';
+    if (s.phase !== 'turn') return;
+    if (s.trade) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.append(btn(nameOf(s.trade.to) + ': اقبل', () => act(s.trade.to, { type: 'trade_accept' }), true),
+        btn(nameOf(s.trade.to) + ': ارفض', () => act(s.trade.to, { type: 'trade_reject' })),
+        btn(nameOf(s.trade.from) + ': اسحب العرض', () => act(s.trade.from, { type: 'trade_cancel' })),
+        btn('(مؤقت انتهى) أسقط العرض', () => apply(E.expireTrade(s))));
+      box.append(row);
+      return;
+    }
+    const from = playerSelect();
+    const to = playerSelect();
+    if (to.options.length > 1) to.selectedIndex = 1;
+    const mk = (ph) => { const i = document.createElement('input'); i.placeholder = ph; i.style.width = '110px'; return i; };
+    const gp = mk('أرقام عقارات: 1,3'), gc = mk('مال'), gj = mk('بطاقات سجن');
+    const tp = mk('أرقام عقارات'), tc = mk('مال'), tj = mk('بطاقات سجن');
+    const side = (p, c, j) => ({
+      props: p.value.split(/[,،\s]+/).filter(Boolean).map(Number),
+      cash: c.value === '' ? 0 : Number(c.value),
+      jailCards: j.value === '' ? 0 : Number(j.value),
+    });
+    const r1 = document.createElement('div'); r1.className = 'row'; r1.append('من', from, 'يعطي:', gp, gc, gj);
+    const r2 = document.createElement('div'); r2.className = 'row'; r2.append('إلى', to, 'مقابل:', tp, tc, tj);
+    box.append(r1, r2, btn('أرسل العرض', () => act(from.value, { type: 'trade_offer', to: to.value, give: side(gp, gc, gj), get: side(tp, tc, tj) }), true));
+  }
+
+  function render() {
+    if (!s) return;
+    renderBoard();
+    renderStatus();
+    renderActions();
+    renderManage();
+    renderTrade();
+  }
+
+  $('start').onclick = start;
+  start();
+})();
+</script>
+</body>
+</html>

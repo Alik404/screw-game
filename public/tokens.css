@@ -70,6 +70,25 @@
   --orange: #e8833a;
   --blue: #3b82c4;
 
+  /* bank game: the 8 property groups */
+  --g1: #8d5b3c;
+  --g2: #4fb3e8;
+  --g3: #e05a9a;
+  --g4: #f08a3c;
+  --g5: #e04848;
+  --g6: #f2c14e;
+  --g7: #3daa6d;
+  --g8: #3c5fd6;
+  /* bank game: player pieces */
+  --p1: #ef5b52;
+  --p2: #4fa3ff;
+  --p3: #43c78a;
+  --p4: #ffc94a;
+  --p5: #b07cf0;
+  --p6: #ff8fc0;
+  --board: #f4efe3;      /* board squares (warm paper) */
+  --board-line: #d8d0bd;
+
   /* spacing scale: multiples of 4px */
   --s1: 4px;
   --s2: 8px;

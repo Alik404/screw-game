@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b2529">
+<title>بنك الحظ - معاينة الشكل</title>
+<link rel="stylesheet" href="/tokens.css">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/bank/bank.css">
+<style>
+  /* preview-only: scene switcher floating at the top-left */
+  .scenes { position: fixed; bottom: 70px; left: 8px; z-index: 30; display: flex; flex-direction: column; gap: 4px; }
+  .scenes button { min-height: 32px; font-size: var(--fs-1); padding: 0 var(--s2); background: var(--table-deep); }
+  .scenes button.on { background: var(--brass); color: var(--ink); }
+  body.shot .scenes { display: none; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div class="scenes" id="scenes"></div>
+
+<script src="/server/games/bank/config.js"></script>
+<script src="/server/games/bank/board.js"></script>
+<script src="/server/games/bank/cards.js"></script>
+<script src="/server/games/bank/engine.js"></script>
+<script src="/bank/ui.js"></script>
+<script>
+(function () {
+  const E = BankEngine, B = BankBoard, C = BankConfig, U = BankUI;
+  const h = U.h;
+  const params = new URLSearchParams(location.search);
+  if (params.get('shot')) document.body.classList.add('shot');
+  const NAMES = { p1: 'أحمد', p2: 'سارة', p3: 'علي', p4: 'ليلى' };
+
+  // ---- a believable mid-game, played by the real engine with simple bots ----
+  let s = E.createGame(['p1', 'p2', 'p3', 'p4'], { seed: 21 }).state;
+  let guard = 0;
+  while (guard++ < 260) {
+    const pid = s.playerIds[s.current];
+    let r;
+    if (s.stage === 'buy') r = E.act(s, pid, { type: 'buy' });
+    if (!r || r.error) r = E.autoPlay(s);
+    s = r.state;
+  }
+  // give the story some colour: a full set with houses, a hotel, a mortgage
+  s = JSON.parse(JSON.stringify(s));
+  const give = (pid, list) => list.forEach((i) => { s.props[i].owner = pid; });
+  give('p1', B.groupSquares(3)); give('p2', B.groupSquares(6)); give('p3', [5, 15]); give('p4', B.groupSquares(8));
+  B.groupSquares(3).forEach((i) => { s.props[i].houses = 2; });
+  B.groupSquares(8).forEach((i) => { s.props[i].houses = 5; });
+  s.props[B.groupSquares(6)[0]].mortgaged = true;
+  s.bankHouses = C.BANK_HOUSES - 6; s.bankHotels = C.BANK_HOTELS - 2;
+  s.players.p1.pos = 11; s.players.p2.pos = 24; s.players.p3.pos = 10; s.players.p3.inJail = true; s.players.p4.pos = 37;
+  s.players.p1.cash = 1240; s.players.p2.cash = 860; s.players.p3.cash = 315; s.players.p4.cash = 2050;
+  s.players.p1.jailCards = ['c11'];
+  s.dice = [4, 3];
+  const base = s;
+
+  const scenes = {
+    roll: { label: 'دوري', make: (x) => { x.current = 0; x.stage = 'roll'; x.dice = [6, 6]; }, event: 'سارة دفعت 32,000 د.ع إيجاراً لليلى في الجادرية' },
+    buy: { label: 'الشراء', make: (x) => { x.current = 0; x.players.p1.pos = 26 + 2; x.players.p1.pos = 31; x.stage = 'buy'; x.pending = { square: 31 }; x.props[31].owner = null; }, event: 'أحمد وصل إلى الحارثية' },
+    auction: { label: 'المزاد', make: (x) => { x.current = 1; x.stage = 'auction'; x.props[31].owner = null; x.auction = { square: 31, bid: 180, bidder: 'p4', seq: 4 }; }, event: 'ليلى زايدت 180,000 د.ع', seconds: 7 },
+    props: { label: 'ممتلكاتي', tab: 'props', make: (x) => { x.current = 0; x.stage = 'postRoll'; } },
+    trade: { label: 'تبادل وارد', tab: 'trade', make: (x) => { x.current = 1; x.stage = 'roll'; x.trade = { id: 1, from: 'p2', to: 'p1', give: { props: [B.groupSquares(6)[1]], cash: 150, jailCards: 0 }, get: { props: [B.groupSquares(3)[0]], cash: 0, jailCards: 0 } }; B.groupSquares(3).forEach((i) => { x.props[i].houses = 0; }); } },
+    compose: { label: 'إنشاء تبادل', tab: 'trade', make: (x) => { x.current = 1; x.stage = 'roll'; B.groupSquares(3).forEach((i) => { x.props[i].houses = 0; }); }, draft: { to: 'p3', give: { props: [12], cash: 100 }, get: { props: [5], cash: 0 } } },
+    debt: { label: 'دين', make: (x) => { x.current = 0; x.stage = 'debt'; x.resume = 'postRoll'; x.players.p1.cash = 120; x.debts = [{ debtor: 'p1', amount: 560, creditor: 'p4', reason: 'rent' }]; x.players.p1.pos = 37; }, event: 'أحمد عليه 560,000 د.ع إيجار فندق الجادرية' },
+    wait: { label: 'دور غيري', make: (x) => { x.current = 2; x.stage = 'roll'; }, event: 'علي في السجن ويحاول رمي دبل' },
+    deed: { label: 'سند عقار', make: (x) => { x.current = 1; x.stage = 'roll'; }, focus: B.groupSquares(8)[0] },
+  };
+
+  let sceneKey = params.get('scene') || 'roll';
+  let tab = null;
+  let focus = null;
+  let draft = { to: null, give: { props: [], cash: 0 }, get: { props: [], cash: 0 } };
+
+  function view() {
+    const sc = scenes[sceneKey];
+    const x = JSON.parse(JSON.stringify(base));
+    sc.make(x);
+    return E.viewFor(x, 'p1');
+  }
+
+  function render() {
+    const sc = scenes[sceneKey];
+    const v = view();
+    const send = (m) => console.log('send', JSON.stringify(m));
+    const curTab = tab || sc.tab || 'board';
+    if (focus === null && sc.focus !== undefined) focus = sc.focus;
+    const ctx = { view: v, names: NAMES, send: send, secondsLeft: sc.seconds, draft: sc.draft || draft, redraw: render };
+
+    const boardEl = U.board(v, { names: NAMES, eventText: sc.event, focus: focus, onCell: (i) => { focus = B.isOwnable(B.SQUARES[i]) ? i : null; render(); } });
+    let content;
+    if (curTab === 'props') content = h('div', { class: 'bk-panel' }, h('div', { class: 'bk-title' }, U.icon('home', 22), 'ممتلكاتي'), U.propertiesTab(ctx));
+    else if (curTab === 'trade') content = h('div', { class: 'bk-panel' }, U.tradeTab(ctx));
+    else if (curTab === 'log') content = h('div', { class: 'bk-panel' }, h('div', { class: 'bk-title' }, U.icon('list', 22), 'السجل'),
+      h('div', { class: 'bk-note' }, ['أحمد رمى 6 و 6 (دبل)', 'أحمد وصل إلى الوزيرية', 'سارة اشترت أبو نؤاس', 'ليلى بنت فندقاً في الجادرية'].map((t) => h('div', null, t))));
+    else if (focus !== null) content = h('div', { class: 'bk-panel' }, U.deed(focus, v, NAMES), h('button', { class: 'bk-btn', onclick: () => { focus = null; render(); } }, 'إغلاق'));
+    else content = U.actionPanel(ctx);
+
+    const tabs = h('nav', { class: 'bk-tabs', 'aria-label': 'أقسام اللعبة' },
+      [['board', 'board', 'اللوحة'], ['props', 'home', 'ممتلكاتي'], ['trade', 'trade', 'تبادل'], ['log', 'list', 'السجل']].map(([k, ic, label]) =>
+        h('button', { class: 'bk-tab' + (curTab === k ? ' on' : ''), onclick: () => { tab = k; focus = null; render(); } },
+          U.icon(ic), label, k === 'trade' && v.trade && v.trade.to === v.you ? h('span', { class: 'count' }, '1') : null)));
+
+    const app = h('div', { class: 'bk-app' },
+      h('header', { class: 'bk-top' },
+        h('span', { class: 'brand' }, 'بنك الحظ'),
+        h('span', { class: 'timer' }, U.icon('clock', 18), '0:' + String(sc.seconds || 24).padStart(2, '0')),
+        h('span', null, 'الغرفة KBWQ')),
+      h('div', { class: 'bk-boardwrap' }, boardEl),
+      h('div', { class: 'bk-scroll' }, content, U.players(v, NAMES)),
+      tabs);
+    document.getElementById('root').replaceChildren(app);
+
+    const sw = document.getElementById('scenes');
+    sw.replaceChildren(...Object.keys(scenes).map((k) => h('button', { class: k === sceneKey ? 'on' : '', onclick: () => { sceneKey = k; tab = null; focus = null; render(); } }, scenes[k].label)));
+  }
+  render();
+})();
+</script>
+</body>
+</html>
