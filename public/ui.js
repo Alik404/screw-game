@@ -35,6 +35,7 @@
     share: '<circle cx="17.5" cy="5.5" r="2.5"/><circle cx="6.5" cy="12" r="2.5"/><circle cx="17.5" cy="18.5" r="2.5"/><path d="M8.7 10.8l6.6-4M8.7 13.2l6.6 4"/>',
     crown: '<path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 10H5z"/><path d="M5 21h14"/>',
     close: '<path d="M6 6l12 12M18 6L6 18"/>',
+    help: '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 1 1 3.4 2.4c-.7.3-1 .8-1 1.5v.6"/><path d="M12 17h.01"/>',
   };
 
   function icon(name, size) {
@@ -166,6 +167,7 @@
       h('div', { class: 'tb-timer' + (left !== null && left <= 10 ? ' low' : ''), id: 'timer' },
         left === null ? null : [icon('clock', 18), h('span', { class: 'num' }, fmtTime(left))]),
       h('div', { class: 'tb-btns' },
+        h('button', { class: 'icon-btn help-btn', onclick: api.toggleHelp, 'aria-label': 'طريقة اللعب' }, icon('help')),
         h('button', { class: 'icon-btn', onclick: function () { api.openSheet('scores'); }, 'aria-label': 'جدول النقاط' }, icon('table')),
         h('button', { class: 'icon-btn', onclick: function () { api.openSheet('menu'); }, 'aria-label': 'القائمة' }, icon('menu'))));
 

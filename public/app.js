@@ -371,6 +371,7 @@
     cancelPick: function () { S.pending = null; render(); },
     askScrew: function () { S.sheet = 'screw'; render(); },
     openSheet: function (name) { S.sheet = name; render(); },
+    toggleHelp: function () { window.ScrewHelp.toggle(); },
   };
 
   // ---------- screens ----------
@@ -466,7 +467,8 @@
       h('div', { class: 'lobby-head' },
         h('div', { class: 'dim center' }, 'كود الغرفة'),
         h('div', { class: 'code-box', dir: 'ltr', 'aria-label': 'كود الغرفة ' + r.code.split('').join(' ') }, r.code),
-        h('button', { class: 'with-icon', onclick: function () { share(r.code); } }, UI.icon('share', 20), 'مشاركة الرابط')),
+        h('button', { class: 'with-icon', onclick: function () { share(r.code); } }, UI.icon('share', 20), 'مشاركة الرابط'),
+        h('button', { class: 'with-icon help-btn', onclick: api.toggleHelp }, UI.icon('help', 20), 'طريقة اللعب')),
       h('div', { class: 'dim' }, 'اللاعبون (' + r.players.length + '/' + C.MAX_PLAYERS + ')'),
       h('ul', { class: 'plist' }, r.players.map(function (p, i) {
         return h('li', { class: p.connected ? '' : 'off' },
@@ -649,6 +651,7 @@
     const overlays = [];
     const kind = !S.you || !S.room ? 'home' : S.game ? (S.game.phase === 'gameOver' ? 'final' : 'table') : 'lobby';
     if (kind !== S.screenKind) { FX.clear(); S.screenKind = kind; }
+    window.ScrewHelp.setAvailable(kind === 'table' || kind === 'lobby');
     if (!S.you || !S.room) {
       screen = homeScreen();
     } else if (S.game && S.game.phase === 'gameOver') {
