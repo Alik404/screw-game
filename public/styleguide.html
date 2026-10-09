@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>سكرو - دليل الأسلوب</title>
+<link rel="stylesheet" href="/tokens.css">
+<link rel="stylesheet" href="/cards.css">
+<link rel="stylesheet" href="/style.css">
+<style>
+  /* styleguide-only layout (no colours here: everything comes from tokens.css) */
+  body { overflow-y: auto; }
+  .sg { max-width: 1100px; margin: 0 auto; padding: var(--s6) var(--s4) var(--s8); display: flex; flex-direction: column; gap: var(--s8); }
+  .sg h1 { font-size: var(--fs-5); color: var(--brass); }
+  .sg h2 { font-size: var(--fs-4); color: var(--text); border-bottom: 1px solid var(--table-glow); padding-bottom: var(--s2); }
+  .sg h3 { margin: 0; font-size: var(--fs-3); font-weight: 700; color: var(--brass); }
+  .sg section { display: flex; flex-direction: column; gap: var(--s4); }
+  .cards { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: flex-start; }
+  .cards.tight { gap: var(--s2); }
+  .cap { font-size: var(--fs-1); color: var(--text-dim); text-align: center; margin-top: var(--s1); line-height: 1.3; }
+  .cell { display: flex; flex-direction: column; align-items: center; }
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--s3); }
+  .sw { border-radius: var(--r-btn); overflow: hidden; background: var(--table-deep); font-size: var(--fs-1); }
+  .sw i { display: block; height: 48px; border-bottom: 1px solid var(--table-glow); }
+  .sw b, .sw span { display: block; padding: 0 var(--s2); }
+  .sw b { padding-top: var(--s1); }
+  .sw span { color: var(--text-dim); padding-bottom: var(--s1); direction: ltr; text-align: end; }
+  .type-lal { font-family: var(--font-display); font-size: var(--fs-5); }
+  .btnrow { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: center; }
+  .stage { background: var(--table); border-radius: var(--r-btn); padding: var(--s4); }
+  .sheet-demo { position: relative; height: 300px; overflow: hidden; border-radius: var(--r-btn); background: var(--table); display: flex; align-items: flex-end; }
+  .sheet-demo .sheet { max-height: none; }
+  .bigcards { display: flex; flex-wrap: wrap; gap: var(--s6); }
+  .pc.xl { --w: 160px; }
+  .pc.xxl { --w: 230px; }
+  .suitrow { display: flex; flex-direction: column; gap: var(--s2); }
+  .row10 { display: flex; flex-wrap: wrap; gap: var(--s2); }
+  .row10.mini { gap: var(--s1); }
+</style>
+</head>
+<body>
+<main class="sg">
+  <header>
+    <h1>سكرو - دليل الأسلوب</h1>
+    <p class="dim">كل الكروت مرسومة بـ SVG في <code>cards.js</code>. الألوان من <code>tokens.css</code> فقط.</p>
+  </header>
+
+  <section id="colors">
+    <h2>الألوان</h2>
+    <div class="swatches" id="swatches"></div>
+  </section>
+
+  <section id="type">
+    <h2>الخطوط</h2>
+    <div class="type-lal">سكرو · 0 1 2 3 4 5 6 7 8 9 · +20 · −1</div>
+    <div style="font-weight:400">Tajawal 400 — الكلمات العادية في الواجهة</div>
+    <div style="font-weight:500">Tajawal 500 — الأزرار والعناوين الفرعية</div>
+    <div style="font-weight:700">Tajawal 700 — التأكيد والأسماء</div>
+    <div style="display:flex;gap:var(--s4);flex-wrap:wrap;align-items:baseline">
+      <span style="font-size:var(--fs-1)">13 صغير</span><span style="font-size:var(--fs-2)">15 عادي</span><span style="font-size:var(--fs-3)">18 متوسط</span><span style="font-size:var(--fs-4)">24 كبير</span><span style="font-size:var(--fs-5);font-family:var(--font-display)">36</span>
+    </div>
+    <div id="fontstatus" class="dim"></div>
+  </section>
+
+  <section id="closeup">
+    <h2>الكروت - تكبير للمراجعة</h2>
+    <div class="bigcards" id="closeups"></div>
+  </section>
+
+  <section id="numbers">
+    <h2>كروت الأرقام - الحجم الكبير (1 إلى 10 بالنقشات الأربع)</h2>
+    <div class="suitrow" id="numbers-big"></div>
+  </section>
+
+  <section id="specials">
+    <h2>كروت الخصائص وكروت القيمة الخاصة</h2>
+    <div class="cards" id="specials-big"></div>
+  </section>
+
+  <section id="backs">
+    <h2>ظهر الكرت</h2>
+    <div class="cards" id="backs-all"></div>
+  </section>
+
+  <section id="minis">
+    <h2>الحجم المصغّر (الخصوم)</h2>
+    <h3>الظهر</h3>
+    <div class="cards tight" id="mini-backs"></div>
+    <h3>مكشوف بفهرس واحد كبير</h3>
+    <div class="cards tight" id="mini-faces"></div>
+  </section>
+
+  <section id="buttons">
+    <h2>الأزرار</h2>
+    <div class="stage">
+      <div class="btnrow">
+        <div class="cell"><button class="primary">اسحب</button><div class="cap">أساسي</div></div>
+        <div class="cell"><button>خذ من الأرض</button><div class="cap">ثانوي</div></div>
+        <div class="cell"><button class="danger">سكرو</button><div class="cap">سكرو</div></div>
+        <div class="cell"><button class="danger solid">نعم، سكرو!</button><div class="cap">سكرو (تأكيد)</div></div>
+        <div class="cell"><button class="primary" disabled>اسحب</button><div class="cap">معطّل</div></div>
+        <div class="cell"><button class="primary" style="transform:scale(.97)">اسحب</button><div class="cap">مضغوط</div></div>
+        <div class="cell"><button class="primary" id="focusdemo">اسحب</button><div class="cap">focus (Tab)</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="seats">
+    <h2>مقعد الخصم</h2>
+    <div class="stage">
+      <div class="opps" id="seat-demo"></div>
+      <div class="cap">الأول: عادي · الثاني: صاحب الدور (حلقة نحاسية) · الثالث: غير متصل · الرابع: نظرتُ إلى كرته (علامة متقطعة)</div>
+    </div>
+  </section>
+
+  <section id="sheets">
+    <h2>النافذة السفلية</h2>
+    <div class="sheet-demo">
+      <div class="sheet">
+        <h2>جدول النقاط</h2>
+        <table>
+          <tr><th>الجولة</th><th>أحمد</th><th>سارة</th></tr>
+          <tr><td>1</td><td>0</td><td>14</td></tr>
+          <tr><td>2</td><td>9</td><td>0</td></tr>
+          <tr><td><b>المجموع</b></td><td class="win">9</td><td>14</td></tr>
+        </table>
+        <button>إغلاق</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="/server/config.js"></script>
+<script src="/server/deck.js"></script>
+<script src="/cards.js"></script>
+<script>
+(function () {
+  const D = ScrewDeck, K = ScrewCards;
+  const $ = (id) => document.getElementById(id);
+
+  function cardNode(card, size) {
+    const d = document.createElement('div');
+    d.className = 'pc ' + size;
+    d.innerHTML = K.svg(card, size === 'mini');
+    return d;
+  }
+  function cell(card, size, caption) {
+    const c = document.createElement('div');
+    c.className = 'cell';
+    c.append(cardNode(card, size));
+    if (caption) { const p = document.createElement('div'); p.className = 'cap'; p.textContent = caption; c.append(p); }
+    return c;
+  }
+
+  // colours: read the real values from tokens.css
+  const tokens = ['table', 'table-glow', 'table-deep', 'paper', 'card-line', 'card-black', 'card-red', 'card-blue', 'card-yellow',
+    'back-red', 'back-red-light', 'ink', 'brass', 'text', 'text-dim', 'red', 'green', 'orange', 'blue'];
+  tokens.forEach((t) => {
+    const s = document.createElement('div');
+    s.className = 'sw';
+    const val = getComputedStyle(document.documentElement).getPropertyValue('--' + t).trim().toUpperCase();
+    s.innerHTML = '<i style="background:var(--' + t + ')"></i><b>--' + t + '</b><span>' + val + '</span>';
+    $('swatches').append(s);
+  });
+
+  const deck = D.buildDeck();
+  const pick = (type, rank, suit) => deck.find((c) => c.type === type && (rank === undefined || c.rank === rank) && (suit === undefined || c.suit === suit));
+
+  // close-ups
+  [
+    ['num', 1, 'spades', '1 ♠ الآس'], ['num', 7, 'hearts', '7 ♥ (عين)'], ['num', 10, 'diamonds', '10 ♦ (عينان)'],
+    ['num', 9, 'clubs', '9 ♣'], ['num', 6, 'hearts', '6 ♥'], ['num', 3, 'spades', '3 ♠'],
+    ['swap', undefined, undefined, 'خد وهات'], ['peekall', undefined, undefined, 'كعب داير'], ['basra', undefined, undefined, 'بصرة'],
+    ['screw_red', undefined, undefined, 'سكرو أحمر (25)'], ['screw_green', undefined, undefined, 'سكرو أخضر (0)'],
+    ['plus20', undefined, undefined, '‎+20'], ['minus1', undefined, undefined, '‎−1'],
+  ].forEach((x) => $('closeups').append(cell(pick(x[0], x[1], x[2]), 'xl', x[3])));
+  $('closeups').append(cell({ hidden: true }, 'xl', 'الظهر'));
+
+  // all numbers
+  [['spades', '♠'], ['hearts', '♥'], ['diamonds', '♦'], ['clubs', '♣']].forEach((s) => {
+    const row = document.createElement('div');
+    row.className = 'row10';
+    for (let r = 1; r <= 10; r++) row.append(cardNode(pick('num', r, s[0]), 'big'));
+    $('numbers-big').append(row);
+  });
+
+  // specials
+  ['swap', 'peekall', 'basra', 'screw_red', 'screw_green', 'plus20', 'minus1'].forEach((t) => {
+    $('specials-big').append(cell(pick(t), 'big', D.describe(pick(t))));
+  });
+  const sp = document.createElement('div');
+  sp.style.width = '100%';
+  $('specials-big').append(sp);
+  ['swap', 'peekall', 'basra', 'screw_red', 'screw_green', 'plus20', 'minus1'].forEach((t) => {
+    $('specials-big').append(cell(pick(t), 'mid', 'متوسط'));
+  });
+
+  // backs
+  $('backs-all').append(cell({ hidden: true }, 'xxl', 'كبير جداً'), cell({ hidden: true }, 'big', 'كبير'), cell({ hidden: true }, 'mid', 'متوسط'), cell({ hidden: true }, 'mini', 'مصغّر'));
+
+  // minis
+  for (let i = 0; i < 6; i++) $('mini-backs').append(cardNode({ hidden: true }, 'mini'));
+  [['num', 1, 'spades'], ['num', 5, 'hearts'], ['num', 7, 'diamonds'], ['num', 10, 'clubs'], ['swap'], ['peekall'], ['basra'], ['screw_red'], ['screw_green'], ['plus20'], ['minus1']]
+    .forEach((x) => $('mini-faces').append(cardNode(pick(x[0], x[1], x[2]), 'mini')));
+
+  // seats
+  const seats = [['سارة', ''], ['أحمد', ' turn'], ['علي', ' off'], ['ليلى', '']];
+  seats.forEach((s, i) => {
+    const o = document.createElement('div');
+    o.className = 'opp' + s[1];
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = s[0] + (s[1] === ' off' ? ' (غير متصل)' : '');
+    const m = document.createElement('div');
+    m.className = 'minis';
+    for (let k = 0; k < 4; k++) {
+      const c = cardNode({ hidden: true }, 'mini');
+      if (i === 3 && k === 2) c.classList.add('marked');
+      m.append(c);
+    }
+    o.append(name, m);
+    $('seat-demo').append(o);
+  });
+
+  // font check
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => {
+    const ok = ['400 16px Lalezar', '400 16px Tajawal', '500 16px Tajawal', '700 16px Tajawal'].map((f) => f + ': ' + (document.fonts.check(f, 'سكرو') ? 'محمّل' : 'لم يُحمّل'));
+    $('fontstatus').textContent = 'الخطوط: ' + ok.join(' | ');
+  });
+})();
+</script>
+</body>
+</html>

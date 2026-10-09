@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>سكرو - وضع الاختبار</title>
+<style>
+  /* Debug page only: plain styling. The real design (tokens.css) comes in phase 3. */
+  body { font-family: system-ui, "Segoe UI", Tahoma, sans-serif; margin: 0; padding: 12px; background: #123840; color: #eef4f3; }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  button { font: inherit; padding: 8px 12px; margin: 2px; border-radius: 8px; border: 1px solid #d9a441; background: #0b2529; color: #eef4f3; cursor: pointer; min-height: 40px; }
+  button.primary { background: #d9a441; color: #1f2430; }
+  button:disabled { opacity: .4; cursor: default; }
+  .bar, .seat, .box { background: #0b2529; border-radius: 10px; padding: 8px 12px; margin: 8px 0; }
+  .seat.current { outline: 3px solid #d9a441; }
+  .seat.caller { border: 2px dashed #d6453d; }
+  .cards { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+  .card { width: 56px; height: 78px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; border: 2px solid transparent; padding: 0; margin: 0; background: #1d5560; color: #eef4f3; }
+  .card:disabled { opacity: 1; }
+  .card.face { background: #fbf6ea; color: #1f2430; }
+  .card.pickable { border-color: #d9a441; transform: translateY(-4px); }
+  .card small { font-weight: 400; font-size: 13px; }
+  .pile { display: inline-block; text-align: center; margin: 0 12px; }
+  .log { max-height: 180px; overflow: auto; font-size: 13px; color: #9db6b8; }
+  .hint { color: #d9a441; font-weight: 700; }
+  .err { color: #ff8f88; font-weight: 700; }
+  label { margin-inline-start: 12px; }
+  select { font: inherit; font-size: 15px; padding: 6px 8px; min-height: 40px; border-radius: 8px; border: 1px solid #d9a441; background: #fbf6ea; color: #1f2430; }
+  select option { background: #fbf6ea; color: #1f2430; }
+  body { overflow-x: hidden; }
+</style>
+</head>
+<body>
+<h1>سكرو - وضع الاختبار (كل المقاعد في هذه الصفحة)</h1>
+
+<div class="bar" id="setup">
+  عدد اللاعبين:
+  <select id="count"></select>
+  <button class="primary" id="start">لعبة جديدة</button>
+  <label><input type="checkbox" id="revealAll"> اكشف الكل</label>
+  <label><input type="checkbox" id="viewAs"> اعرض من منظور اللاعب صاحب الدور (viewFor)</label>
+</div>
+
+<div class="bar" id="info"></div>
+<div class="box" id="table"></div>
+<div id="seats"></div>
+<div class="box" id="actions"></div>
+<div class="box"><b>ما رآه اللاعب سراً</b><div id="privateBox">-</div></div>
+<div class="box"><b>السجل</b><div class="log" id="log"></div></div>
+
+<div id="fatal" class="err" hidden></div>
+<!-- relative paths: work both through npm start and when opened directly as a file -->
+<script src="../server/config.js"></script>
+<script src="../server/deck.js"></script>
+<script src="../server/engine.js"></script>
+<script>
+(function () {
+  if (typeof ScrewEngine === 'undefined') {
+    const f = document.getElementById('fatal');
+    f.hidden = false;
+    f.textContent = 'تعذر تحميل ملفات المحرك. شغّل الخادم بالأمر npm start وافتح http://localhost:3000/debug.html (من نفس مجلد المشروع).';
+    return;
+  }
+  const E = ScrewEngine, D = ScrewDeck, C = ScrewConfig;
+  const $ = (id) => document.getElementById(id);
+  const NAMES = ['أحمد', 'سارة', 'علي', 'ليلى', 'عمر', 'نور'];
+
+  let state = null;
+  let ids = [];
+  let pick = null; // {prompt, onPick(ownerId, slot)} - waiting for a card click
+  let message = '';
+
+  for (let n = C.MIN_PLAYERS; n <= C.MAX_PLAYERS; n++) {
+    $('count').add(new Option(n, n, false, n === 3));
+  }
+
+  function nameOf(id) { return NAMES[ids.indexOf(id)] || id; }
+
+  function log(text) {
+    const d = document.createElement('div');
+    d.textContent = text;
+    $('log').prepend(d);
+  }
+
+  function describeEvent(e) {
+    const p = e.playerId ? nameOf(e.playerId) : '';
+    switch (e.type) {
+      case 'turn': return 'دور ' + p;
+      case 'ready': return p + ' جاهز';
+      case 'draw': return p + ' سحب من الكومة';
+      case 'swap_drawn': return p + ' بدّل الكرت ' + (e.slot + 1) + ' ورمى ' + D.describe(e.discarded);
+      case 'discard_drawn': return p + ' رمى ' + D.describe(e.card);
+      case 'take_discard': return p + ' أخذ ' + D.describe(e.taken) + ' من الأرض وبدّل به الكرت ' + (e.slot + 1);
+      case 'match': return p + ' بصّر بالكرت ' + (e.slot + 1) + ' (' + D.describe(e.card) + '): ' + (e.success ? 'صح' : 'غلط');
+      case 'penalty': return p + ' سحب كرت عقوبة';
+      case 'look': return p + ' نظر إلى ' + e.targets.map((t) => 'كرت ' + (t.slot + 1) + ' عند ' + nameOf(t.ownerId)).join('، ');
+      case 'swap': return p + ' بدّل كرته ' + (e.slot + 1) + ' مع كرت ' + (e.targetSlot + 1) + ' عند ' + nameOf(e.targetPlayerId);
+      case 'throw': return p + ' رمى كرته ' + D.describe(e.card) + ' (بصرة)';
+      case 'skip_ability': return p + ' تخطى الخاصية';
+      case 'screw': return p + ' أعلن سكرو!';
+      case 'reshuffle': return 'خُلطت كومة الرمي وصارت كومة سحب';
+      case 'round_start': return 'بدأت الجولة ' + e.round;
+      case 'round_end': return 'انتهت الجولة';
+      case 'game_over': return 'انتهت اللعبة';
+      default: return e.type;
+    }
+  }
+
+  function apply(playerId, action) {
+    const r = E.act(state, playerId, action);
+    if (r.error) { message = r.error; render(); return; }
+    message = '';
+    state = r.state;
+    r.events.forEach((e) => log(describeEvent(e)));
+    r.privates.forEach(showPrivate);
+    pick = null;
+    render();
+  }
+
+  function applyAuto(fn) {
+    const r = fn(state);
+    if (r.error) { message = r.error; render(); return; }
+    message = '';
+    state = r.state;
+    r.events.forEach((e) => log(describeEvent(e)));
+    pick = null;
+    render();
+  }
+
+  function showPrivate(p) {
+    const parts = p.reveals.map((r) => {
+      const where = r.ownerId === null ? 'الكرت المسحوب' : 'كرت ' + (r.slot + 1) + ' عند ' + nameOf(r.ownerId);
+      return where + ' = ' + D.describe(r.card) + ' (' + r.card.value + ' نقطة)';
+    });
+    const box = $('privateBox');
+    box.textContent = nameOf(p.playerId) + ' يرى: ' + parts.join('، ') + (p.seconds ? ' - لمدة ' + p.seconds + ' ثوانٍ' : '');
+    clearTimeout(showPrivate.t);
+    if (p.seconds) showPrivate.t = setTimeout(() => { box.textContent = '-'; }, p.seconds * 1000);
+  }
+
+  function cardEl(card, opts) {
+    const b = document.createElement('button');
+    b.className = 'card' + (card && !card.hidden ? ' face' : '');
+    if (card && !card.hidden) {
+      b.innerHTML = '<span>' + D.describe(card) + '</span><small>' + card.value + '</small>';
+    } else {
+      b.textContent = '؟';
+    }
+    if (opts.pickable) b.classList.add('pickable');
+    b.disabled = !opts.pickable;
+    if (opts.pickable) b.onclick = opts.onClick;
+    return b;
+  }
+
+  function startGame() {
+    const n = Number($('count').value);
+    ids = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6'].slice(0, n);
+    const r = E.createGame(ids);
+    state = r.state;
+    $('log').textContent = '';
+    $('privateBox').textContent = '-';
+    pick = null; message = '';
+    log('لعبة جديدة بـ ' + n + ' لاعبين - كل لاعب يرى كرتيه الأيمنين، اضغط "جاهز" لكل مقعد');
+    render();
+  }
+
+  function render() {
+    if (!state) return;
+    const s = state;
+    const reveal = $('revealAll').checked;
+    const cur = s.phase === 'turn' ? s.playerIds[s.current] : null;
+    const viewAsCur = $('viewAs').checked && cur;
+
+    $('info').innerHTML =
+      'الجولة <b>' + s.round + '/' + C.ROUNDS + '</b> · اللفة <b>' + E.lapOf(s) + '</b> · المرحلة <b>' + s.phase + '</b>' +
+      (cur ? ' · الدور: <b>' + nameOf(cur) + '</b> (' + s.stage + ')' : '') +
+      (s.screwCaller ? ' · <span class="err">سكرو من ' + nameOf(s.screwCaller) + '</span>' : '') +
+      '<br>المجموع الكلي: ' + s.playerIds.map((id) => nameOf(id) + ' ' + s.totals[id]).join(' | ') +
+      (message ? '<br><span class="err">' + message + '</span>' : '');
+
+    // piles
+    const table = $('table');
+    table.innerHTML = '';
+    const top = s.discard[s.discard.length - 1];
+    table.append(
+      pile('كومة السحب (' + s.deck.length + ')', cardEl({ hidden: true }, {})),
+      pile('الأرض (' + s.discard.length + ')', cardEl(top, {}))
+    );
+    if (s.drawn && cur) {
+      table.append(pile('المسحوب عند ' + nameOf(cur), cardEl(s.drawn, {})));
+    }
+
+    // seats
+    const seats = $('seats');
+    seats.innerHTML = '';
+    s.playerIds.forEach((id) => {
+      const view = E.viewFor(s, viewAsCur ? cur : id); // own seat view: shows the opening peek
+      const seat = document.createElement('div');
+      seat.className = 'seat' + (id === cur ? ' current' : '') + (id === s.screwCaller ? ' caller' : '');
+      const mine = viewAsCur ? cur : id;
+      const head = document.createElement('div');
+      head.innerHTML = '<b>' + nameOf(id) + '</b> (' + s.hands[id].length + ' كروت)';
+      if (s.phase === 'peek') {
+        const rb = document.createElement('button');
+        rb.textContent = s.ready[id] ? 'جاهز ✓' : 'جاهز';
+        rb.disabled = s.ready[id];
+        rb.onclick = () => apply(id, { type: 'ready' });
+        head.append(rb);
+      }
+      seat.append(head);
+      const row = document.createElement('div');
+      row.className = 'cards';
+      s.hands[id].forEach((card, slot) => {
+        let shown = view.players.find((p) => p.id === id).hand[slot];
+        if (reveal) shown = card;
+        // when picking, only valid targets are clickable
+        const pickable = !!(pick && pick.valid(id, slot));
+        row.append(cardEl(shown, { pickable: pickable, onClick: () => pick.onPick(id, slot) }));
+      });
+      seat.append(row);
+      seats.append(seat);
+    });
+
+    renderActions();
+  }
+
+  function pile(title, el) {
+    const d = document.createElement('div');
+    d.className = 'pile';
+    d.append(title, document.createElement('br'), el);
+    return d;
+  }
+
+  function btn(label, fn, primary) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    if (primary) b.className = 'primary';
+    b.onclick = fn;
+    return b;
+  }
+
+  // Ask the user to click a card; calls onPick(ownerId, slot).
+  function askPick(prompt, valid, onPick) {
+    pick = { prompt: prompt, valid: valid, onPick: onPick };
+    render();
+  }
+
+  function renderActions() {
+    const box = $('actions');
+    box.innerHTML = '';
+    const s = state;
+
+    if (s.phase === 'peek') {
+      box.append('اضغط "جاهز" لكل مقعد، أو: ');
+      box.append(btn('انتهى وقت النظرة الأولى (تخطي)', () => applyAuto(E.forceStartPlay), true));
+      return;
+    }
+    if (s.phase === 'roundOver') {
+      box.append(resultText(s.result));
+      box.append(btn('الجولة التالية', () => apply(s.playerIds[0], { type: 'next_round' }), true));
+      return;
+    }
+    if (s.phase === 'gameOver') {
+      box.append(resultText(s.result));
+      const w = document.createElement('div');
+      w.className = 'hint';
+      w.textContent = 'الفائز: ' + s.winnerIds.map(nameOf).join(' و ');
+      box.append(w, btn('لعبة جديدة', startGame, true));
+      return;
+    }
+
+    const me = s.playerIds[s.current];
+    const label = document.createElement('div');
+    label.innerHTML = 'حركات <b>' + nameOf(me) + '</b>: ';
+    box.append(label);
+
+    if (pick) {
+      const p = document.createElement('div');
+      p.className = 'hint';
+      p.textContent = pick.prompt;
+      box.append(p, btn('إلغاء', () => { pick = null; render(); }));
+      return;
+    }
+
+    const own = (slotFn) => (id, slot) => id === me && slotFn(slot);
+    const anyOwn = () => true;
+    const others = (id) => id !== me;
+
+    if (s.stage === 'start') {
+      box.append(btn('اسحب', () => apply(me, { type: 'draw' }), true));
+      box.append(btn('خذ من الأرض', () => askPick('اختر كرتاً من كروتك لتبدله بكرت الأرض', own(anyOwn),
+        (id, slot) => apply(me, { type: 'take_discard', slot: slot }))));
+      box.append(btn('بصّر', () => askPick('اختر كرتك الذي تدّعي أنه مطابق لكرت الأرض', own(anyOwn),
+        (id, slot) => apply(me, { type: 'match', slot: slot }))));
+      const screw = btn('سكرو', () => { if (confirm('تأكيد إعلان سكرو؟ لا يمكن التراجع.')) apply(me, { type: 'call_screw' }); });
+      screw.style.borderColor = '#d6453d';
+      if (!s.screwCaller) box.append(screw);
+      box.append(btn('(مؤقت انتهى) لعب تلقائي', () => applyAuto(E.autoPlay)));
+    } else if (s.stage === 'drawn') {
+      const d = document.createElement('div');
+      d.textContent = 'سحبت: ' + D.describe(s.drawn) + ' (' + s.drawn.value + ' نقطة)';
+      box.append(d);
+      box.append(btn('بدّله', () => askPick('اختر الكرت الذي تريد استبداله', own(anyOwn),
+        (id, slot) => apply(me, { type: 'swap_drawn', slot: slot })), true));
+      box.append(btn('ارمه', () => apply(me, { type: 'discard_drawn' })));
+      box.append(btn('(مؤقت انتهى) لعب تلقائي', () => applyAuto(E.autoPlay)));
+    } else if (s.stage === 'ability') {
+      box.append(abilityControls(me, own, others, anyOwn));
+      box.append(btn('تخطي الخاصية', () => apply(me, { type: 'skip_ability' })));
+      box.append(btn('(مؤقت انتهى) لعب تلقائي', () => applyAuto(E.autoPlay)));
+    }
+  }
+
+  function abilityControls(me, own, others, anyOwn) {
+    const wrap = document.createElement('span');
+    const s = state;
+    const note = document.createElement('div');
+    note.className = 'hint';
+    wrap.append(note);
+    switch (s.ability) {
+      case 'peek_own':
+        note.textContent = 'بص في ورقتك';
+        wrap.append(btn('اختر كرتك', () => askPick('اختر كرتاً من كروتك لتنظر إليه', own(anyOwn),
+          (id, slot) => apply(me, { type: 'use_ability', slot: slot })), true));
+        break;
+      case 'peek_other':
+        note.textContent = 'بص في ورقة غيرك';
+        wrap.append(btn('اختر كرت لاعب', () => askPick('اختر كرتاً عند لاعب آخر', others,
+          (id, slot) => apply(me, { type: 'use_ability', targetPlayerId: id, targetSlot: slot })), true));
+        break;
+      case 'swap':
+        note.textContent = 'خد وهات';
+        wrap.append(btn('اختر الكرتين', () => askPick('أولاً: اختر كرتاً من كروتك', own(anyOwn), (id, slot) => {
+          askPick('ثانياً: اختر كرتاً عند لاعب آخر', (oid) => oid !== me && oid !== s.screwCaller,
+            (oid, oslot) => apply(me, { type: 'use_ability', slot: slot, targetPlayerId: oid, targetSlot: oslot }));
+        }), true));
+        break;
+      case 'peek_all':
+        note.textContent = 'كعب داير';
+        wrap.append(btn('(أ) كرتان من كروتي', () => {
+          const need = Math.min(C.PEEK_ALL_SELF_COUNT, s.hands[me].length);
+          const slots = [];
+          const step = () => askPick('اختر الكرت رقم ' + (slots.length + 1) + ' من ' + need, (id, slot) => id === me && !slots.includes(slot),
+            (id, slot) => {
+              slots.push(slot);
+              if (slots.length === need) apply(me, { type: 'use_ability', mode: 'self', slots: slots });
+              else step();
+            });
+          step();
+        }, true));
+        wrap.append(btn('(ب) كرت عند كل لاعب', () => {
+          const targets = s.playerIds.filter((x) => x !== me && s.hands[x].length > 0);
+          const picks = [];
+          const step = () => {
+            const left = targets.filter((x) => !picks.some((p) => p.playerId === x));
+            askPick('اختر كرتاً عند: ' + left.map(nameOf).join(' أو '), (id) => left.includes(id),
+              (id, slot) => {
+                picks.push({ playerId: id, slot: slot });
+                if (picks.length === targets.length) apply(me, { type: 'use_ability', mode: 'others', picks: picks });
+                else step();
+              });
+          };
+          step();
+        }));
+        break;
+      case 'throw':
+        note.textContent = 'بصرة';
+        wrap.append(btn('اختر كرتاً لترميه', () => askPick('اختر كرتاً من كروتك لترميه مكشوفاً', own(anyOwn),
+          (id, slot) => apply(me, { type: 'use_ability', slot: slot })), true));
+        break;
+    }
+    return wrap;
+  }
+
+  function resultText(r) {
+    const d = document.createElement('div');
+    d.className = 'hint';
+    d.innerHTML = 'نتيجة الجولة ' + r.round + (r.multiplied ? ' (مضاعفة)' : '') + ':<br>' +
+      Object.keys(r.hands).map((id) =>
+        nameOf(id) + ': ' + r.hands[id].map(D.describe).join(' ، ') + ' = ' + r.sums[id] +
+        ' → سُجّل ' + r.scores[id] + (id === r.screwCaller ? ' (أعلن سكرو)' : '')).join('<br>');
+    return d;
+  }
+
+  $('start').onclick = startGame;
+  $('revealAll').onchange = render;
+  $('viewAs').onchange = render;
+  startGame();
+})();
+</script>
+</body>
+</html>

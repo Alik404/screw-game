@@ -1,0 +1,73 @@
+/* Card art classes. Colours only through tokens.css variables. */
+.pc {
+  --w: 74px;
+  display: inline-block;
+  width: var(--w);
+  height: calc(var(--w) * 1.4); /* explicit: flex/absolute layouts must never stretch a card */
+  aspect-ratio: 5 / 7;
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-card);
+  line-height: 0;
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  position: relative;
+}
+.pc svg.cv { width: 100%; height: 100%; display: block; direction: ltr; overflow: visible; }
+
+.c-face { fill: var(--paper); stroke: var(--card-line); stroke-width: 2; }
+
+/* suits and text */
+.s-red { fill: var(--card-red); }
+.s-black { fill: var(--card-black); }
+.tx-red { fill: var(--card-red); }
+.tx-black { fill: var(--card-black); }
+.tx-white { fill: var(--paper); }
+.tx-yellow { fill: var(--card-yellow); }
+.f-num { font-family: var(--font-display); }
+.f-ui { font-family: var(--font); font-weight: 700; }
+.i-blue { color: var(--card-blue); }
+
+/* illustration fills and strokes (classic palette) */
+.a-red { fill: var(--card-red); }
+.a-blue { fill: var(--card-blue); }
+.a-yellow { fill: var(--card-yellow); }
+.a-black { fill: var(--card-black); }
+.a-white { fill: var(--paper); }
+.k-black { stroke: var(--card-black); }
+.k-red { stroke: var(--card-red); }
+.k-blue { stroke: var(--card-blue); }
+.k-white { stroke: var(--paper); }
+.k-yellow { stroke: var(--card-yellow); }
+
+/* special-value (joker style) cards: one variable drives all their colours */
+.v-red { --vc: var(--red); }
+.v-green { --vc: var(--green); }
+.v-orange { --vc: var(--orange); }
+.v-blue { --vc: var(--blue); }
+.vf { fill: var(--vc); }
+.vt { fill: var(--vc); }
+.cut { stroke: var(--paper); }
+
+/* backs */
+.bk-base { fill: var(--back-red); }
+.bk-line { stroke: var(--back-red-light); }
+.bk-line2 { stroke: var(--back-red-light); opacity: .5; }
+.bk-dot { fill: var(--back-red-light); }
+.bk-edge { stroke: var(--back-red); }
+
+/* sizes */
+.pc.big { --w: min(74px, 11.5dvh, calc((min(100vw, 560px) - 16px - 8px * var(--n, 4)) / var(--n, 4))); }
+.pc.mid { --w: 56px; }
+.pc.mini { --w: 26px; box-shadow: 0 1px 2px rgba(0, 0, 0, .5); }
+
+/* states used on the table */
+.pc.pick { cursor: pointer; transform: translateY(-6px); outline: 3px solid var(--brass); outline-offset: 1px; }
+.pc.mini.pick { transform: translateY(-3px); outline-width: 2px; }
+.pc.dim { opacity: .45; }
+.pc.marked { outline: 3px dashed var(--brass); outline-offset: 2px; }
+.pc.mini.marked { outline-width: 2px; }
+.pc.peeked { outline: 3px solid var(--brass); outline-offset: 2px; }

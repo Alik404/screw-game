@@ -1,0 +1,15 @@
+# Render Blueprint (optional): lets Render create the web service with these settings.
+# The same values are listed in README.md for creating the service by hand.
+services:
+  - type: web
+    name: screw-game
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"

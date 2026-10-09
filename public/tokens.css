@@ -1,0 +1,101 @@
+/* Design tokens (spec section 7). Colours are defined ONLY here. */
+
+/* ---------- fonts (local files, OFL licence; see fonts/LICENSE-*.txt) ---------- */
+@font-face {
+  font-family: "Lalezar"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url("/fonts/lalezar-arabic-400-normal.woff2") format("woff2");
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0898-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC;
+}
+@font-face {
+  font-family: "Lalezar"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url("/fonts/lalezar-latin-400-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Tajawal"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url("/fonts/tajawal-arabic-400-normal.woff2") format("woff2");
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0898-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC;
+}
+@font-face {
+  font-family: "Tajawal"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url("/fonts/tajawal-latin-400-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Tajawal"; font-style: normal; font-weight: 500; font-display: swap;
+  src: url("/fonts/tajawal-arabic-500-normal.woff2") format("woff2");
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0898-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC;
+}
+@font-face {
+  font-family: "Tajawal"; font-style: normal; font-weight: 500; font-display: swap;
+  src: url("/fonts/tajawal-latin-500-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Tajawal"; font-style: normal; font-weight: 700; font-display: swap;
+  src: url("/fonts/tajawal-arabic-700-normal.woff2") format("woff2");
+  unicode-range: U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0898-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC;
+}
+@font-face {
+  font-family: "Tajawal"; font-style: normal; font-weight: 700; font-display: swap;
+  src: url("/fonts/tajawal-latin-700-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  /* table */
+  --table: #123840;
+  --table-glow: #1d5560;
+  --table-deep: #0b2529;
+
+  /* paper and card colours (classic playing-card palette) */
+  --paper: #ffffff;
+  --card-line: #c9cdd2;
+  --card-black: #1a1a1f;
+  --card-red: #d32f2f;
+  --card-blue: #1f4e9c;
+  --card-yellow: #f2c230;
+  --back-red: #7e1621;
+  --back-red-light: #a8323e;
+
+  /* ui */
+  --ink: #1f2430;
+  --brass: #d9a441;
+  --text: #eef4f3;
+  --text-dim: #9db6b8;
+
+  /* special-value cards */
+  --red: #d6453d;
+  --green: #2fa36b;
+  --orange: #e8833a;
+  --blue: #3b82c4;
+
+  /* spacing scale: multiples of 4px */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s6: 24px;
+  --s8: 32px;
+
+  /* shapes */
+  --r-card: 10%; /* of the card's own width */
+  --r-btn: 14px;
+  --r-sheet: 20px;
+
+  /* two-layer shadow: tight + soft */
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.45), 0 8px 20px rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 6px 14px rgba(0, 0, 0, 0.32);
+
+  /* type scale */
+  --fs-1: 13px;
+  --fs-2: 15px;
+  --fs-3: 18px;
+  --fs-4: 24px;
+  --fs-5: 36px;
+  --fs-hero: 72px;   /* exception: the word "سكرو" on the home screen */
+  --fs-splash: 96px; /* exception: the screw announcement */
+
+  --font: "Tajawal", system-ui, "Segoe UI", Tahoma, sans-serif;
+  --font-display: "Lalezar", "Tajawal", system-ui, "Segoe UI", Tahoma, sans-serif;
+}
