@@ -4,20 +4,108 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b2529">
-<title>سكرو</title>
+<title>ألعاب الأصدقاء</title>
 <link rel="stylesheet" href="/tokens.css">
 <link rel="stylesheet" href="/cards.css">
 <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/portal.css">
+<script>
+  // Old invite links look like /?room=ABCD: they belong to the card game.
+  (function () {
+    if (new URLSearchParams(location.search).get('room')) location.replace('/screw.html' + location.search);
+  })();
+</script>
 </head>
-<body>
-<div id="app"></div>
+<body class="portal">
+<main class="pt">
+  <header class="pt-head">
+    <h1>ألعاب الأصدقاء</h1>
+    <p>اختر لعبة، أنشئ غرفة، وأرسل الرابط لأصدقائك.</p>
+  </header>
+
+  <a class="pt-back" id="resume" href="/screw.html" hidden>
+    <span>عندك غرفة <b>سكرو</b> مفتوحة <b id="resume-code"></b></span>
+    <span class="go">العودة للغرفة</span>
+  </a>
+
+  <section class="pt-games" aria-label="الألعاب">
+    <article class="pt-card" id="game-screw">
+      <div class="pt-art"><div class="pt-cards" id="screw-art" aria-hidden="true"></div></div>
+      <div class="pt-title"><h2>سكرو</h2><span class="pt-tag live">متاحة الآن</span></div>
+      <p class="pt-desc">لعبة ورق للذاكرة والجرأة: احفظ كروتك، بدّل وبصّر، وأعلن "سكرو" قبل الجميع. المجموع الأقل يفوز.</p>
+      <div class="pt-meta"><span>2 – 6 لاعبين</span><span>5 جولات</span><span>جوال وحاسوب</span></div>
+      <div class="pt-actions">
+        <a class="pt-btn primary" href="/screw.html">العب سكرو</a>
+      </div>
+    </article>
+
+    <article class="pt-card" id="game-bank">
+      <div class="pt-art">
+        <div class="pt-board" aria-hidden="true"></div>
+        <div class="pt-token"></div><div class="pt-token b"></div>
+        <div class="pt-dice" aria-hidden="true"></div>
+      </div>
+      <div class="pt-title"><h2>بنك الحظ</h2><span class="pt-tag soon">قريباً</span></div>
+      <p class="pt-desc">لعبة عقارات في مناطق بغداد: ارمِ النرد، اشترِ الأراضي، ابنِ البيوت، زايد وتبادل، وأفلس خصومك.</p>
+      <div class="pt-meta"><span>2 – 6 لاعبين</span><span>مزاد وتبادل ورهن</span><span>حتى الإفلاس</span></div>
+      <div class="pt-actions">
+        <span class="pt-btn" aria-disabled="true" style="opacity:.5;cursor:default">اللعب الجماعي قيد التجهيز</span>
+        <div class="pt-btn row2">
+          <a href="/bank/preview.html">معاينة الشكل</a>
+          <a href="/bank/debug.html">جرّب القوانين وحدك</a>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <p class="pt-foot">الغرف تعيش في ذاكرة الخادم: إذا نام الخادم تُنشئ غرفة جديدة وتكمل.</p>
+</main>
+
 <script src="/server/config.js"></script>
 <script src="/server/deck.js"></script>
 <script src="/cards.js"></script>
-<script src="/fx.js"></script>
-<script src="/sound.js"></script>
-<script src="/ui.js"></script>
-<script src="/help.js"></script>
-<script src="/app.js"></script>
+<script>
+  (function () {
+    // screw art: back, red screw, minus one (same cards as the game)
+    const D = ScrewDeck, K = ScrewCards;
+    const art = document.getElementById('screw-art');
+    [{ hidden: true }, D.makeCard('screw_red'), D.makeCard('minus1')].forEach(function (c) {
+      const d = document.createElement('div');
+      d.className = 'pc';
+      d.innerHTML = K.svg(c, false);
+      art.append(d);
+    });
+    // bank art: coloured bars on the border squares of a small board
+    const bars = ['--g1', '--g2', '--g3', '--g4', '--g5', '--g6', '--g7', '--g8'];
+    const board = document.querySelector('.pt-board');
+    const ring = [0, 1, 2, 3, 4, 9, 14, 19, 24, 23, 22, 21, 20, 15, 10, 5];
+    for (let i = 0; i < 25; i++) {
+      const cell = document.createElement('i');
+      const r = ring.indexOf(i);
+      if (r >= 0 && r % 2 === 1) cell.style.setProperty('--bar', 'var(' + bars[(r >> 1) % bars.length] + ')');
+      if ([6, 7, 8, 11, 12, 13, 16, 17, 18].indexOf(i) >= 0) cell.style.display = 'none';
+      board.append(cell);
+    }
+    const mid = document.createElement('i');
+    mid.className = 'mid';
+    board.append(mid);
+    const dice = document.querySelector('.pt-dice');
+    [[5, 9, 1, 3, 7], [1, 3, 5, 7, 9, 4]].forEach(function (on) {
+      const s = document.createElement('span');
+      for (let k = 1; k <= 9; k++) { const b = document.createElement('b'); if (on.indexOf(k) >= 0) b.className = 'on'; s.append(b); }
+      dice.append(s);
+    });
+    // a saved screw room? offer a way back
+    try {
+      const s = JSON.parse(localStorage.getItem('screw.session') || 'null');
+      if (s && s.code) {
+        document.getElementById('resume-code').textContent = s.code;
+        const a = document.getElementById('resume');
+        a.hidden = false;
+        a.href = '/screw.html?room=' + encodeURIComponent(s.code);
+      }
+    } catch (e) { /* storage unavailable: no shortcut */ }
+  })();
+</script>
 </body>
 </html>

@@ -92,6 +92,8 @@ input.code { text-transform: uppercase; letter-spacing: .3em; text-align: center
 .disconnect { border-top: 3px solid var(--brass); }
 .disconnect p { margin: 0; line-height: 1.6; font-size: var(--fs-3); }
 
+.all-games { text-align: center; color: var(--text-dim); font-size: var(--fs-1); padding: var(--s3); text-decoration: underline; }
+
 /* ---------- lobby ---------- */
 .lobby-head { display: flex; flex-direction: column; gap: var(--s3); }
 .code-box {

@@ -242,7 +242,7 @@
         S.session = { code: m.code, playerId: m.playerId, name: S.name || (S.session && S.session.name) || '' };
         store('screw.session', S.session);
         S.homeError = '';
-        try { history.replaceState(null, '', '/?room=' + m.code); } catch (e) { /* ignore */ }
+        try { history.replaceState(null, '', '/screw.html?room=' + m.code); } catch (e) { /* ignore */ }
         break;
       case 'room_state':
         S.room = m;
@@ -353,7 +353,7 @@
     S.sheet = null; S.pending = null; S.log = []; S.eventText = '';
     urlCode = '';
     S.codeInput = '';
-    try { history.replaceState(null, '', '/'); } catch (e) { /* ignore */ }
+    try { history.replaceState(null, '', '/screw.html'); } catch (e) { /* ignore */ }
   }
 
   function showToast(text, ok) {
@@ -430,7 +430,8 @@
           : [h('button', { class: 'primary', onclick: create, disabled: offline }, 'إنشاء غرفة'),
             h('div', { class: 'or' }, 'أو ادخل بالكود'),
             h('div', { class: 'row' }, code, h('button', { onclick: join, disabled: offline }, 'دخول'))],
-        S.homeError ? h('div', { class: 'error', role: 'alert' }, S.homeError) : null));
+        S.homeError ? h('div', { class: 'error', role: 'alert' }, S.homeError) : null,
+        h('a', { class: 'all-games', href: '/' }, 'كل الألعاب')));
   }
 
   const AVATAR_CLASSES = ['av-1', 'av-2', 'av-3', 'av-4', 'av-5', 'av-6'];
@@ -450,7 +451,7 @@
   }
 
   function share(code) {
-    const url = location.origin + '/?room=' + code;
+    const url = location.origin + '/screw.html?room=' + code;
     if (navigator.share) {
       navigator.share({ title: 'سكرو', text: 'تعال نلعب سكرو! كود الغرفة: ' + code, url: url }).catch(function () {});
       return;
