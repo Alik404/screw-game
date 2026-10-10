@@ -19,6 +19,9 @@ const SHARED = {
   '/server/games/bank/board.js': path.join(__dirname, 'games', 'bank', 'board.js'),
   '/server/games/bank/cards.js': path.join(__dirname, 'games', 'bank', 'cards.js'),
   '/server/games/bank/engine.js': path.join(__dirname, 'games', 'bank', 'engine.js'),
+  '/server/games/seven/config.js': path.join(__dirname, 'games', 'seven', 'config.js'),
+  '/server/games/seven/deck.js': path.join(__dirname, 'games', 'seven', 'deck.js'),
+  '/server/games/seven/engine.js': path.join(__dirname, 'games', 'seven', 'engine.js'),
 };
 
 const TYPES = {

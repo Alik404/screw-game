@@ -47,7 +47,13 @@
     lost: null,
     disconnectedAt: null,
     timerEnds: {},     // kind -> local ms
+    view3d: store('bank.view3d') !== false,
+    pending3d: null,
   };
+
+  function use3D() {
+    return !!(window.Bank3D && window.Bank3D.supported() && S.view3d);
+  }
 
   // ---------- network ----------
 
@@ -118,8 +124,8 @@
         S.autoJoining = false;
         // a code that belongs to the card game: take the player there
         if (m.game && m.game !== 'bank') {
-          store('screw.session', { code: m.code, playerId: m.playerId, name: S.name });
-          location.replace('/screw.html?room=' + m.code);
+          store(m.game + '.session', { code: m.code, playerId: m.playerId, name: S.name });
+          location.replace('/' + m.game + '.html?room=' + m.code);
           return;
         }
         S.you = m.you;
@@ -158,7 +164,8 @@
     const prev = S.game;
     S.game = m;
     S.names = {};
-    m.roster.forEach(function (r) { S.names[r.id] = r.name; });
+    S.tokens = {};
+    m.roster.forEach(function (r) { S.names[r.id] = r.name; S.tokens[r.id] = r.token; });
     const now = Date.now();
     S.timerEnds = {};
     (m.timers || []).forEach(function (t) { S.timerEnds[t.kind] = t.endsAt - (t.now - now); });
@@ -167,8 +174,8 @@
         SND.play('turn');
         if (navigator.vibrate) { try { navigator.vibrate(60); } catch (e) { /* ignore */ } }
       }
-      S.tab = 'board';
-      S.focus = null;
+      if (S.tab === 'board') S.focus = null;
+      else if (!prev || prev.currentPlayerId !== m.you) toast('دورك! ارجع للوحة عندما تنتهي', true);
     }
     if (m.trade && m.trade.to === m.you && (!prev || !prev.trade || prev.trade.id !== m.trade.id)) {
       toast('وصلك عرض تبادل من ' + (S.names[m.trade.from] || ''), true);
@@ -216,6 +223,7 @@
     }
   }
 
+  const STEP_MS = 300;   // time per square: slow enough to follow the piece
   const walking = {};   // pid -> position currently drawn while a piece walks
   const queue = {};     // pid -> pending moves
   const running = {};
@@ -225,7 +233,7 @@
   // true only while the dice tumble or a piece is walking, never a permanent state
   function busy() {
     if (Date.now() < rollUntil) return true;
-    return Object.keys(running).some(function (k) { return running[k] && Date.now() - runningSince[k] < 4000; });
+    return Object.keys(running).some(function (k) { return running[k] && Date.now() - runningSince[k] < 15000; });
   }
 
   function pump(pid) {
@@ -243,7 +251,7 @@
       walking[pid] = pos;
       SND.play('deal');
       render();
-      setTimeout(step, 120);
+      setTimeout(step, STEP_MS);
     }
     setTimeout(step, Math.max(0, rollUntil - Date.now()));
   }
@@ -257,7 +265,8 @@
     }
     switch (e.type) {
       case 'roll':
-        rollUntil = Date.now() + 650;
+        rollUntil = Date.now() + (use3D() ? 1150 : 650);
+        if (use3D()) window.Bank3D.roll(e.dice);
         SND.play('throw');
         setTimeout(render, 700);
         rollTick();
@@ -392,6 +401,25 @@
     copyText(url).then(function () { toast('تم نسخ الرابط', true); }, function () { toast('تعذر النسخ. الرابط: ' + url); });
   }
 
+  // the pieces: mine is highlighted, the ones other players took are disabled
+  function tokenPicker(r) {
+    const mine = r.players.find(function (p) { return p.id === S.you; });
+    const myIndex = r.players.indexOf(mine);
+    return h('div', { class: 'bk-tokens' },
+      h('div', { class: 'dim small' }, 'اختر قطعتك'),
+      h('div', { class: 'bk-tokgrid' }, C.TOKENS.map(function (t) {
+        const owner = r.players.find(function (p) { return p.token === t; });
+        const isMine = owner && owner.id === S.you;
+        const taken = owner && !isMine;
+        return h('button', {
+          class: 'bk-tokpick' + (isMine ? ' on' : ''), disabled: taken, 'aria-pressed': isMine ? 'true' : 'false',
+          style: { '--pc': 'var(--p' + ((isMine ? myIndex : owner ? r.players.indexOf(owner) : myIndex) + 1) + ')' },
+          'aria-label': U.TOKEN_NAMES[t] + (taken ? '، اختارها ' + owner.name : ''),
+          onclick: isMine || taken ? null : function () { send({ type: 'set_token', token: t }); },
+        }, h('span', { class: 'bk-tokface' }, U.tokenIcon(t)), h('small', null, taken ? owner.name : U.TOKEN_NAMES[t]));
+      })));
+  }
+
   function lobbyScreen() {
     const r = S.room;
     const amHost = r.hostId === S.you;
@@ -404,10 +432,11 @@
       h('div', { class: 'dim' }, 'اللاعبون (' + r.players.length + '/' + C.MAX_PLAYERS + ')'),
       h('ul', { class: 'plist' }, r.players.map(function (p, i) {
         return h('li', { class: p.connected ? '' : 'off' },
-          h('span', { class: 'bk-av', style: { '--pc': 'var(--p' + (i + 1) + ')' } }, Array.from(p.name)[0] || '؟'),
+          h('span', { class: 'bk-av', style: { '--pc': 'var(--p' + (i + 1) + ')' } }, p.token ? U.tokenIcon(p.token) : (Array.from(p.name)[0] || '؟')),
           h('span', { class: 'pname' }, p.name + (p.id === S.you ? ' (أنت)' : ''), p.connected ? null : h('small', null, ' غير متصل')),
           p.isHost ? h('span', { class: 'tag' }, 'المضيف') : null);
       })),
+      tokenPicker(r),
       h('div', { class: 'bk-lobby-note dim small' },
         'كل لاعب يبدأ بـ ' + U.money(C.START_CASH) + '. اللعبة حتى يبقى لاعب واحد، أو ينهيها المضيف فيفوز الأغنى.'),
       h('div', { class: 'grow' }),
@@ -450,10 +479,18 @@
       view: v, names: S.names, send: send, draft: S.draft, redraw: render,
       secondsLeft: v.stage === 'auction' ? secondsOf('auction') : undefined,
     };
-    const boardEl = U.board(dv, {
-      names: S.names, eventText: S.eventText, focus: S.focus,
+    const boardOpts = {
+      names: S.names, tokens: S.tokens, walking: walking, eventText: S.eventText, focus: S.focus,
       onCell: function (i) { S.tab = 'board'; S.focus = B.isOwnable(SQ[i]) ? (S.focus === i ? null : i) : null; render(); },
-    });
+    };
+    let boardEl;
+    if (use3D()) {
+      // one persistent 3D board: moved into the new screen, then updated after the render
+      boardEl = window.Bank3D.element();
+      S.pending3d = { view: dv, opts: Object.assign({ rolling: Date.now() < rollUntil }, boardOpts) };
+    } else {
+      boardEl = U.board(dv, boardOpts);
+    }
     let content;
     if (S.tab === 'props') content = h('div', { class: 'bk-panel' }, h('div', { class: 'bk-title' }, U.icon('home', 22), 'ممتلكاتي'), U.propertiesTab(ctx));
     else if (S.tab === 'trade') content = h('div', { class: 'bk-panel' }, U.tradeTab(ctx));
@@ -475,7 +512,7 @@
     return h('div', { class: 'bk-app' },
       top,
       h('div', { class: 'bk-boardwrap' }, boardEl),
-      h('div', { class: 'bk-scroll' }, cardNote(), content, U.players(dv, S.names)),
+      h('div', { class: 'bk-scroll' }, cardNote(), content, U.players(dv, S.names, S.tokens)),
       tabs(v));
   }
 
@@ -518,6 +555,8 @@
     const amHost = S.room && S.room.hostId === S.you;
     return sheet('القائمة', h('div', { class: 'menu-list' },
       h('button', { class: 'with-icon', onclick: function () { S.sheet = 'help'; render(); } }, U.icon('card', 20), 'طريقة اللعب'),
+      window.Bank3D && window.Bank3D.supported() ? h('button', { class: 'with-icon', onclick: function () { S.view3d = !S.view3d; store('bank.view3d', S.view3d); render(); } },
+        U.icon('board', 20), S.view3d ? 'العرض ثلاثي الأبعاد - اضغط للعرض المسطح' : 'العرض المسطح - اضغط للعرض ثلاثي الأبعاد') : null,
       h('button', { class: 'with-icon', onclick: function () { SND.setMuted(!muted); render(); } },
         U.icon(muted ? 'mute' : 'sound', 20), muted ? 'الصوت مكتوم - اضغط للتشغيل' : 'الصوت يعمل - اضغط للكتم'),
       amHost && S.game.phase === 'turn' ? h('button', { class: 'with-icon danger', onclick: function () { S.sheet = 'end'; render(); } }, U.icon('crown', 20), 'إنهاء اللعبة الآن (يفوز الأغنى)') : null,
@@ -567,6 +606,9 @@
   // ---------- render ----------
 
   function render() {
+    const ae = document.activeElement;
+    if (ae && ae.tagName === 'INPUT' && rootEl.contains(ae) && S.game) { S.deferred = true; return; }
+    S.deferred = false;
     const now = Date.now();
     if (S.toast && S.toast.until <= now) S.toast = null;
     let screen;
@@ -586,6 +628,7 @@
     nodes.push(shell);
     if (S.toast) nodes.push(h('div', { class: 'toast' + (S.toast.ok ? ' ok' : ''), role: 'alert' }, S.toast.text));
     rootEl.replaceChildren.apply(rootEl, nodes);
+    if (S.pending3d) { const p = S.pending3d; S.pending3d = null; window.Bank3D.update(p.view, p.opts); }
   }
 
   setInterval(function () {
@@ -601,6 +644,12 @@
     if (S.status !== 'open' && Date.now() - (S.lastSlow || 0) > 1000) { S.lastSlow = Date.now(); render(); }
     if (S.toast && S.toast.until <= Date.now()) render();
   }, 250);
+
+  // the 3D module loads after this file: draw again once it is there
+  window.addEventListener('bank3d-ready', function () { render(); });
+
+  // the screen catches up as soon as the player leaves the field they were typing in
+  document.addEventListener('focusout', function () { setTimeout(function () { if (S.deferred) render(); }, 0); });
 
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible' && (!ws || ws.readyState > 1)) connect();

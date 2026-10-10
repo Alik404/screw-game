@@ -8,6 +8,8 @@ const SCREW_CONFIG = require('../config');
 const SCREW = require('../engine');
 const BANK_CONFIG = require('./bank/config');
 const BANK = require('./bank/engine');
+const SEVEN_CONFIG = require('./seven/config');
+const SEVEN = require('./seven/engine');
 
 const screw = {
   id: 'screw',
@@ -82,6 +84,7 @@ const bank = {
     'mortgage', 'unmortgage', 'pay_debt', 'declare_bankruptcy', 'trade_offer', 'trade_accept', 'trade_reject', 'trade_cancel',
   ],
   fields: ['type', 'square', 'amount', 'to', 'give', 'get'],
+  tokens: BANK_CONFIG.TOKENS,
   create: function (seats) { return BANK.createGame(seats); },
   act: function (state, seat, action) {
     const r = BANK.act(state, seat, action);
@@ -112,4 +115,51 @@ const bank = {
   },
 };
 
-module.exports = { screw: screw, bank: bank };
+const seven = {
+  id: 'seven',
+  minPlayers: SEVEN_CONFIG.MIN_PLAYERS,
+  maxPlayers: SEVEN_CONFIG.MAX_PLAYERS,
+  actions: ['play', 'draw', 'keep', 'play_drawn', 'choose_color'],
+  fields: ['type', 'card', 'color'],
+  // the only host option: how many rounds (checked by the engine against ROUNDS_OPTIONS)
+  startOptions: function (m) {
+    const o = m && m.options && typeof m.options === 'object' ? m.options : {};
+    return { rounds: o.rounds };
+  },
+  create: function (seats, options) { return SEVEN.createGame(seats, { rounds: options && options.rounds }); },
+  act: function (state, seat, action) { return SEVEN.act(state, seat, action); },
+  view: function (state, seat) { return SEVEN.viewFor(state, seat); },
+  // the view already has players[] (id + card count): add names and connection state
+  decorate: function (view, roster) {
+    view.players = view.players.map(function (vp) {
+      const rp = roster.find(function (p) { return p.id === vp.id; });
+      vp.name = rp.name;
+      vp.connected = rp.connected;
+      vp.isHost = rp.isHost;
+      return vp;
+    });
+  },
+  // one clock per turn; the key changes when the turn passes, not when a drawn card is decided
+  timers: function (s) {
+    if (s.phase !== 'turn') return [];
+    return [{ kind: 'turn', key: 'turn:' + s.round + ':' + s.turnCount, seconds: SEVEN_CONFIG.TURN_SECONDS }];
+  },
+  timeout: function (s) { return SEVEN.autoPlay(s); },
+  messageFor: function (ev) {
+    if (ev.type === 'round_end') {
+      const r = ev.result;
+      return { type: 'round_result', round: r.round, winnerId: r.winnerId, points: r.points, hands: r.hands, totals: r.totals };
+    }
+    if (ev.type === 'game_over') return { type: 'game_over', totals: ev.totals, winnerIds: ev.winnerIds };
+    return { type: 'event', event: ev };
+  },
+  host: {
+    next_round: function (s, seat) { return SEVEN.act(s, seat, { type: 'next_round' }); },
+    new_game: function (s) {
+      if (s.phase !== 'gameOver') return { error: SEVEN.ERR.wrongStage };
+      return SEVEN.createGame(s.playerIds, { rounds: s.rounds });
+    },
+  },
+};
+
+module.exports = { screw: screw, bank: bank, seven: seven };

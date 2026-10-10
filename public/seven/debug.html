@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>سبعة وسبعة - وضع الاختبار</title>
+<style>
+  /* Debug page only: plain styling. The real design comes in phase U3. */
+  body { font-family: system-ui, "Segoe UI", Tahoma, sans-serif; margin: 0; padding: 12px; background: #123840; color: #eef4f3; font-size: 14px; }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  h3 { margin: 4px 0; font-size: 15px; }
+  button, select, input { font: inherit; padding: 6px 10px; margin: 2px; border-radius: 8px; border: 1px solid #d9a441; background: #0b2529; color: #eef4f3; min-height: 36px; }
+  button.primary { background: #d9a441; color: #1f2430; }
+  button:disabled { opacity: .4; }
+  .box { background: #0b2529; border-radius: 10px; padding: 8px 12px; margin: 8px 0; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  .seat { background: #0b2529; border-radius: 10px; padding: 8px 12px; margin: 8px 0; border: 2px solid transparent; }
+  .seat.cur { border-color: #d9a441; }
+  .cards { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+  .card { width: 52px; height: 72px; border-radius: 8px; border: 2px solid #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 700; font-size: 15px; padding: 0; margin: 0; color: #fff; }
+  .card small { font-weight: 400; font-size: 11px; }
+  .card.red { background: #d6453d; }
+  .card.yellow { background: #f2c230; color: #1f2430; }
+  .card.green { background: #2fa36b; }
+  .card.blue { background: #3b82c4; }
+  .card.wild { background: #1f2430; }
+  .card.hidden { background: #1d5560; color: #9db6b8; }
+  .card.ok { border-color: #d9a441; outline: 3px solid #d9a441; }
+  .card:disabled { opacity: 1; }
+  .card.dim { opacity: .4; }
+  .table { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .err { color: #ff8f88; font-weight: 700; }
+  .hint { color: #d9a441; font-weight: 700; }
+  .dot { display: inline-block; width: 14px; height: 14px; border-radius: 50%; vertical-align: middle; border: 1px solid #fff; }
+  .log { max-height: 200px; overflow: auto; font-size: 12px; color: #9db6b8; }
+</style>
+</head>
+<body>
+<h1>سبعة وسبعة - وضع الاختبار (كل المقاعد في هذه الصفحة)</h1>
+<div id="fatal" class="err" hidden></div>
+
+<div class="box row" id="setup">
+  عدد اللاعبين: <select id="count"></select>
+  الجولات: <select id="rounds"></select>
+  البذرة: <input id="seed" type="number" placeholder="عشوائي" style="width:100px">
+  <button class="primary" id="start">لعبة جديدة</button>
+  <label><input type="checkbox" id="revealAll"> اكشف الكل</label>
+</div>
+
+<div class="box" id="info"></div>
+<div class="box table" id="table"></div>
+<div id="seats"></div>
+<div class="box" id="actions"></div>
+<div class="box"><h3>السجل</h3><div class="log" id="log"></div></div>
+
+<!-- relative paths: work both through npm start and when opened directly as a file -->
+<script src="../../server/games/seven/config.js"></script>
+<script src="../../server/games/seven/deck.js"></script>
+<script src="../../server/games/seven/engine.js"></script>
+<script>
+(function () {
+  if (typeof SevenEngine === 'undefined') {
+    const f = document.getElementById('fatal');
+    f.hidden = false;
+    f.textContent = 'تعذر تحميل ملفات المحرك. شغّل الخادم بالأمر npm start وافتح http://localhost:3000/seven/debug.html';
+    return;
+  }
+  const E = SevenEngine, D = SevenDeck, C = SevenConfig;
+  const $ = (id) => document.getElementById(id);
+  const NAMES = ['أحمد', 'سارة', 'علي', 'ليلى', 'عمر', 'نور'];
+  const HEX = { red: '#d6453d', yellow: '#f2c230', green: '#2fa36b', blue: '#3b82c4' };
+  let s = null, ids = [], message = '', pickColor = null;
+
+  for (let n = C.MIN_PLAYERS; n <= C.MAX_PLAYERS; n++) $('count').add(new Option(n, n, false, n === 3));
+  C.ROUNDS_OPTIONS.forEach((r) => $('rounds').add(new Option(r, r, false, r === C.DEFAULT_ROUNDS)));
+
+  const nameOf = (id) => NAMES[ids.indexOf(id)] || id;
+  function log(t) { const d = document.createElement('div'); d.textContent = t; $('log').prepend(d); }
+
+  function describe(e) {
+    const p = e.playerId ? nameOf(e.playerId) : '';
+    switch (e.type) {
+      case 'round_start': return 'بدأت الجولة ' + e.round + ' - الكرت الأول: ' + D.describe(e.card);
+      case 'turn': return '— دور ' + p;
+      case 'play': return p + ' رمى ' + D.describe(e.card) + (e.card.color ? '' : ' واختار ' + D.COLOR_NAMES[e.color]);
+      case 'draw': return p + ' سحب كرتاً';
+      case 'keep': return p + ' احتفظ بالكرت المسحوب';
+      case 'penalty': return p + ' سحب ' + e.count + ' عقوبة';
+      case 'skip': return p + ' فقد دوره';
+      case 'reverse': return 'انعكس الاتجاه';
+      case 'color': return p + ' اختار اللون ' + D.COLOR_NAMES[e.color];
+      case 'reshuffle': return 'خُلطت كومة الطاولة وصارت كومة سحب';
+      case 'draw_empty': return p + ' لا كروت للسحب، مرّر دوره';
+      case 'round_end': return 'فاز ' + nameOf(e.result.winnerId) + ' بالجولة وأخذ ' + e.result.points + ' نقطة';
+      case 'game_over': return 'انتهت اللعبة. الفائز: ' + e.winnerIds.map(nameOf).join(' و ');
+      default: return e.type;
+    }
+  }
+
+  function apply(r) {
+    if (r.error) { message = r.error; render(); return; }
+    message = '';
+    s = r.state;
+    pickColor = null;
+    r.events.forEach((e) => log(describe(e)));
+    render();
+  }
+  const act = (pid, a) => apply(E.act(s, pid, a));
+
+  function start() {
+    const n = Number($('count').value);
+    ids = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6'].slice(0, n);
+    const seed = $('seed').value === '' ? undefined : Number($('seed').value);
+    const r = E.createGame(ids, { seed: seed, rounds: Number($('rounds').value) });
+    s = r.state;
+    $('log').textContent = '';
+    message = '';
+    pickColor = null;
+    r.events.forEach((e) => log(describe(e)));
+    render();
+  }
+
+  function cardEl(card, opts) {
+    opts = opts || {};
+    const b = document.createElement('button');
+    const hidden = !card;
+    b.className = 'card ' + (hidden ? 'hidden' : (card.color || 'wild')) + (opts.ok ? ' ok' : '') + (opts.dim ? ' dim' : '');
+    b.innerHTML = hidden ? '؟' : '<span>' + (card.type === 'num' ? card.rank : D.TYPE_NAMES[card.type]) + '</span><small>' + (card.color ? D.COLOR_NAMES[card.color] : '') + '</small>';
+    b.disabled = !opts.onClick;
+    if (opts.onClick) b.onclick = opts.onClick;
+    return b;
+  }
+
+  function render() {
+    if (!s) return;
+    const reveal = $('revealAll').checked;
+    const cur = s.phase === 'turn' ? s.playerIds[s.current] : null;
+    $('info').innerHTML = 'الجولة <b>' + s.round + '/' + s.rounds + '</b> · المرحلة <b>' + s.phase + (s.stage ? ' (' + s.stage + ')' : '') + '</b>' +
+      (cur ? ' · الدور: <b>' + nameOf(cur) + '</b>' : '') + ' · الاتجاه ' + (s.direction === 1 ? '→' : '←') +
+      '<br>المجموع: ' + s.playerIds.map((id) => nameOf(id) + ' ' + s.totals[id]).join(' | ') +
+      (message ? '<br><span class="err">' + message + '</span>' : '');
+
+    const t = $('table');
+    t.innerHTML = '';
+    const top = s.discard[s.discard.length - 1];
+    const deckBox = document.createElement('div');
+    deckBox.append('كومة السحب (' + s.deck.length + ')', document.createElement('br'), cardEl(null));
+    const topBox = document.createElement('div');
+    topBox.append('الطاولة', document.createElement('br'), cardEl(top));
+    const col = document.createElement('div');
+    col.innerHTML = 'اللون الحالي: ' + (s.color ? '<span class="dot" style="background:' + HEX[s.color] + '"></span> ' + D.COLOR_NAMES[s.color] : 'لم يُحدد');
+    t.append(deckBox, topBox, col);
+    if (s.drawn && cur) {
+      const d = document.createElement('div');
+      d.append('المسحوب عند ' + nameOf(cur), document.createElement('br'), cardEl(s.drawn));
+      t.append(d);
+    }
+
+    const seats = $('seats');
+    seats.innerHTML = '';
+    s.playerIds.forEach((id) => {
+      const v = E.viewFor(s, id); // each seat sees only its own hand, exactly as the server would send it
+      const seat = document.createElement('div');
+      seat.className = 'seat' + (id === cur ? ' cur' : '');
+      seat.innerHTML = '<b>' + nameOf(id) + '</b> (' + s.hands[id].length + ' كروت)' + (id === cur ? ' <span class="hint">دوره</span>' : '');
+      const row = document.createElement('div');
+      row.className = 'cards';
+      v.hand.forEach((c) => {
+        const canPlay = id === cur && s.stage === 'play';
+        const ok = canPlay && v.playable.includes(c.id);
+        row.append(cardEl(c, {
+          ok: ok, dim: canPlay && !ok,
+          onClick: canPlay ? () => playHand(id, c) : null,
+        }));
+      });
+      seat.append(row);
+      seats.append(seat);
+    });
+    if (reveal) {
+      const all = document.createElement('div');
+      all.className = 'box';
+      all.innerHTML = '<h3>كل الأيدي (اكشف الكل)</h3>' + s.playerIds.map((id) => nameOf(id) + ': ' + s.hands[id].map(D.describe).join('، ')).join('<br>');
+      seats.append(all);
+    }
+    renderActions(cur);
+  }
+
+  function playHand(id, card) {
+    if (D.isWild(card)) { pickColor = { pid: id, kind: 'play', card: card.id }; render(); return; }
+    act(id, { type: 'play', card: card.id });
+  }
+
+  function colorButtons(onPick) {
+    const wrap = document.createElement('span');
+    wrap.append('اختر اللون: ');
+    C.COLORS.forEach((c) => {
+      const b = document.createElement('button');
+      b.innerHTML = '<span class="dot" style="background:' + HEX[c] + '"></span> ' + D.COLOR_NAMES[c];
+      b.onclick = () => onPick(c);
+      wrap.append(b);
+    });
+    return wrap;
+  }
+
+  function renderActions(cur) {
+    const box = $('actions');
+    box.innerHTML = '';
+    if (s.phase === 'roundOver') {
+      const r = s.result;
+      box.append('فاز ' + nameOf(r.winnerId) + ' بالجولة وأخذ ' + r.points + ' نقطة. ');
+      const b = document.createElement('button');
+      b.className = 'primary'; b.textContent = 'الجولة التالية';
+      b.onclick = () => act(s.playerIds[0], { type: 'next_round' });
+      box.append(b);
+      return;
+    }
+    if (s.phase === 'gameOver') {
+      const h = document.createElement('div');
+      h.className = 'hint';
+      h.textContent = 'الفائز: ' + s.winnerIds.map(nameOf).join(' و ');
+      const b = document.createElement('button');
+      b.className = 'primary'; b.textContent = 'لعبة جديدة'; b.onclick = start;
+      box.append(h, b);
+      return;
+    }
+    box.append('حركات ' + nameOf(cur) + ': ');
+    if (pickColor) { box.append(colorButtons((c) => act(pickColor.pid, { type: pickColor.kind, card: pickColor.card, color: c }))); return; }
+    const mk = (label, fn, primary) => { const b = document.createElement('button'); b.textContent = label; if (primary) b.className = 'primary'; b.onclick = fn; return b; };
+    if (s.stage === 'color') {
+      box.append(colorButtons((c) => act(cur, { type: 'choose_color', color: c })));
+    } else if (s.stage === 'play') {
+      box.append(mk('اسحب', () => act(cur, { type: 'draw' }), true), ' أو اضغط كرتاً مضيئاً من يدك');
+    } else if (s.stage === 'drawn') {
+      box.append(mk('ارمِ المسحوب', () => {
+        if (D.isWild(s.drawn)) { pickColor = { pid: cur, kind: 'play_drawn' }; render(); } else act(cur, { type: 'play_drawn' });
+      }, true), mk('احتفظ به', () => act(cur, { type: 'keep' })));
+    }
+    box.append(mk('(مؤقت انتهى) لعب تلقائي', () => apply(E.autoPlay(s))));
+  }
+
+  $('start').onclick = start;
+  $('revealAll').onchange = render;
+  start();
+})();
+</script>
+</body>
+</html>

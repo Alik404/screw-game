@@ -64,6 +64,28 @@
     menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   };
 
+  // the pieces players pick in the lobby (line icons, drawn white on the player's colour)
+  const TOKEN_PATHS = {
+    car: '<path d="M3.5 15.5v-3.2l2-4.8h13l2 4.8v3.2z"/><path d="M5.5 12h13"/><circle cx="7.5" cy="16.5" r="1.8"/><circle cx="16.5" cy="16.5" r="1.8"/>',
+    camel: '<path d="M3 19v-5.5c0-1.5 1-2.5 2.5-2.5h1l2-4 2 3 2-3 2 4h.5c1.5 0 2.5 1 2.5 2.5V19"/><path d="M17.5 11l1.5-3.5h2V10"/><path d="M8 19v-4.5M14 19v-4.5"/>',
+    palm: '<path d="M12 21.5V10"/><path d="M12 10c-1.5-3.5-5-4-8-2.5M12 10c1.5-3.5 5-4 8-2.5M12 10c-.5-3.5-3-6-6.5-6.5M12 10c.5-3.5 3-6 6.5-6.5"/><path d="M8.5 21.5h7"/>',
+    tea: '<path d="M7.5 4.5h9L15 8.5c1.6 2.2 1.6 5.8 0 8h-6c-1.6-2.2-1.6-5.8 0-8z"/><path d="M8.5 8.5h7"/><path d="M5 20h14"/>',
+    boat: '<path d="M2.5 15h19l-3 4.5h-13z"/><path d="M12 15V3.5l6.5 8.5H12"/>',
+    plane: '<path d="M12 3c.8 0 1.4.7 1.4 1.6V9.2l6.6 4v1.7l-6.6-2v4l2.2 1.7v1.4L12 19l-3.6 1v-1.4l2.2-1.7v-4l-6.6 2v-1.7l6.6-4V4.6C10.6 3.7 11.2 3 12 3z"/>',
+    dallah: '<path d="M9 8.5h6l1.2 9.5H7.8z"/><path d="M10 8.5l.8-3h2.4l.8 3"/><path d="M16 11.5l4-2.5-.8 4.5"/><path d="M7.8 18h8.4M10.5 4.5h3"/>',
+    crown: '<path d="M3.5 8.5l4.5 4 4-7 4 7 4.5-4-2 10h-13z"/><path d="M5.5 21h13"/>',
+  };
+  const TOKEN_NAMES = { car: 'سيارة', camel: 'جمل', palm: 'نخلة', tea: 'استكان', boat: 'بلم', plane: 'طائرة', dallah: 'دلة', crown: 'تاج' };
+
+  function tokenIcon(name) {
+    const s = document.createElement('span');
+    s.className = 'bk-tkn';
+    s.setAttribute('aria-hidden', 'true');
+    s.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+      (TOKEN_PATHS[name] || '<circle cx="12" cy="12" r="5"/>') + '</svg>';
+    return s;
+  }
+
   function icon(name, size, cls) {
     const s = document.createElement('span');
     s.className = 'bk-ico' + (cls ? ' ' + cls : '');
@@ -130,7 +152,9 @@
       const style = { gridRow: String(pos.r), gridColumn: String(pos.c) };
       if (pr && pr.owner) style['--own'] = 'var(--p' + playerIndex(view, pr.owner) + ')';
       const kids = [];
-      if (sq.group) kids.push(h('div', { class: 'bk-band', style: { background: 'var(--g' + sq.group + ')' } }, houses(pr && pr.houses)));
+      // the owner badge sits on the colour band (an empty strip) so it never covers the name
+      const badge = pr && pr.owner ? h('span', { class: 'bk-ownbadge', title: opts.names ? opts.names[pr.owner] : '' }, tokenIcon(opts.tokens && opts.tokens[pr.owner])) : null;
+      if (sq.group) kids.push(h('div', { class: 'bk-band', style: { background: 'var(--g' + sq.group + ')' } }, badge, houses(pr && pr.houses)));
       const body = h('div', { class: 'bk-cbody' });
       const ic = squareIcon(sq);
       if (ic) body.append(icon(ic, null, 'sq'));
@@ -142,14 +166,14 @@
         kids.push(h('div', { class: 'bk-toks' }, here.map(function (id) {
           const p = view.players[id];
           return h('span', {
-            class: 'bk-tok' + (id === cur ? ' cur' : '') + (p.inJail ? ' jailed' : ''),
+            class: 'bk-tok' + (id === cur ? ' cur' : '') + (p.inJail ? ' jailed' : '') + (opts.walking && opts.walking[id] ? ' walk' : ''),
             style: { background: 'var(--p' + playerIndex(view, id) + ')' },
             title: opts.names ? opts.names[id] : id,
             'data-player': id,
-          });
+          }, tokenIcon(opts.tokens && opts.tokens[id]));
         })));
       }
-      if (pr && pr.owner) kids.push(h('span', { class: 'bk-ownmark' }));
+      if (badge && !sq.group) { badge.classList.add('corner'); kids.push(badge); } // stations and utilities have no band
       const cell = h(opts.onCell ? 'button' : 'div', {
         class: cls.join(' '), style: style, 'data-square': i,
         'aria-label': sq.name + (pr && pr.owner && opts.names ? '، يملكه ' + opts.names[pr.owner] : ''),
@@ -237,7 +261,7 @@
 
   // ---------- players ----------
 
-  function players(view, names) {
+  function players(view, names, tokens) {
     const cur = view.currentPlayerId;
     return h('div', { class: 'bk-players', role: 'list' }, view.playerIds.map(function (id) {
       const p = view.players[id];
@@ -246,7 +270,7 @@
         class: 'bk-pl' + (id === cur ? ' cur' : '') + (p.bankrupt ? ' out' : '') + (id === view.you ? ' me' : ''),
         role: 'listitem', style: { '--pc': 'var(--p' + playerIndex(view, id) + ')' },
       },
-        h('span', { class: 'bk-av' }, Array.from(names[id] || '؟')[0]),
+        h('span', { class: 'bk-av' }, tokens && tokens[id] ? tokenIcon(tokens[id]) : Array.from(names[id] || '؟')[0]),
         h('div', { class: 'bk-plinfo' },
           h('div', { class: 'bk-plname' }, names[id] + (id === view.you ? ' (أنت)' : '')),
           h('div', { class: 'bk-plcash' }, p.bankrupt ? 'مفلس' : moneyShort(p.cash)),
@@ -443,5 +467,6 @@
       btn('أرسل العرض', function () { ctx.send({ type: 'trade_offer', to: d.to, give: d.give, get: d.get }); }, 'primary', 'trade', !d.to));
   }
 
-  root.BankUI = { h, icon, money, moneyShort, board, dice, deed, players, actionPanel, propertiesTab, tradeTab, cellPos, ring };
+  // the raw icon drawings are shared with the 3D board (it paints them into its texture)
+  root.BankUI = { ICON_PATHS: P, TOKEN_PATHS, squareIcon, h, icon, tokenIcon, TOKEN_NAMES, money, moneyShort, board, dice, deed, players, actionPanel, propertiesTab, tradeTab, cellPos, ring };
 })(window);

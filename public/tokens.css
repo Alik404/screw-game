@@ -70,6 +70,14 @@
   --orange: #e8833a;
   --blue: #3b82c4;
 
+  /* seven game: the four card colours */
+  --u-red: #e2453c;
+  --u-yellow: #f4c430;
+  --u-green: #2fa36b;
+  --u-blue: #3b82c4;
+  --u-ink: #1f2430;      /* text on the yellow cards */
+  --u-yellow-deep: #9a7400; /* numbers and symbols on the white diamond of yellow cards (the bright yellow is unreadable on white) */
+
   /* bank game: the 8 property groups */
   --g1: #8d5b3c;
   --g2: #4fb3e8;

@@ -39,6 +39,16 @@
       </div>
     </article>
 
+    <article class="pt-card" id="game-seven">
+      <div class="pt-art"><div class="pt-seven" id="seven-art" aria-hidden="true"></div></div>
+      <div class="pt-title"><h2>سبعة وسبعة</h2><span class="pt-tag live">متاحة الآن</span></div>
+      <p class="pt-desc">لعبة ورق ملوّنة: طابق اللون أو الرقم، ومنع وعكس و+2 وجوكر. أول من يخلص كروته يفوز بالجولة.</p>
+      <div class="pt-meta"><span>2 – 6 لاعبين</span><span>3 أو 5 جولات</span><span>جوال وحاسوب</span></div>
+      <div class="pt-actions">
+        <a class="pt-btn primary" href="/seven.html">العب سبعة وسبعة</a>
+      </div>
+    </article>
+
     <article class="pt-card" id="game-bank">
       <div class="pt-art">
         <div class="pt-board" aria-hidden="true"></div>
@@ -71,6 +81,14 @@
       d.innerHTML = K.svg(c, false);
       art.append(d);
     });
+    // seven art: four fanned cards in the game colours
+    const sv = document.getElementById('seven-art');
+    [['red', '7'], ['yellow', '+2'], ['green', 'عكس'], ['blue', '7']].forEach(function (c) {
+      const d = document.createElement('div');
+      d.className = 'pt-ucard ' + c[0];
+      d.innerHTML = '<span>' + c[1] + '</span>';
+      sv.append(d);
+    });
     // bank art: coloured bars on the border squares of a small board
     const bars = ['--g1', '--g2', '--g3', '--g4', '--g5', '--g6', '--g7', '--g8'];
     const board = document.querySelector('.pt-board');
@@ -94,7 +112,7 @@
     // a saved screw room? offer a way back
     try {
       // a saved seat (card game or bank game) gets the shortcut
-      const pick = [['screw', 'سكرو', '/screw.html'], ['bank', 'بنك الحظ', '/bank.html']].map(function (g) {
+      const pick = [['screw', 'سكرو', '/screw.html'], ['bank', 'بنك الحظ', '/bank.html'], ['seven', 'سبعة وسبعة', '/seven.html']].map(function (g) {
         const s = JSON.parse(localStorage.getItem(g[0] + '.session') || 'null');
         return s && s.code ? { code: s.code, name: g[1], url: g[2] } : null;
       }).filter(Boolean)[0];

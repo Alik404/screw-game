@@ -5,6 +5,8 @@
 })(this, function () {
   return {
     MIN_PLAYERS: 2,
+    // pieces a player can pick in the lobby (each one once per room)
+    TOKENS: ['car', 'camel', 'palm', 'tea', 'boat', 'plane', 'dallah', 'crown'],
     MAX_PLAYERS: 6,
     START_CASH: 1500,
     GO_SALARY: 200,

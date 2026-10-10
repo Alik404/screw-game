@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>سبعة وسبعة - دليل الأسلوب</title>
+<link rel="stylesheet" href="/tokens.css">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/seven/seven.css">
+<style>
+  /* styleguide-only layout (no colours here: everything comes from tokens.css) */
+  body { overflow-y: auto; }
+  .sg { max-width: 1100px; margin: 0 auto; padding: var(--s6) var(--s4) var(--s8); display: flex; flex-direction: column; gap: var(--s8); }
+  .sg h1 { font-size: var(--fs-5); color: var(--brass); }
+  .sg h2 { font-size: var(--fs-4); color: var(--text); border-bottom: 1px solid var(--table-glow); padding-bottom: var(--s2); }
+  .sg section { display: flex; flex-direction: column; gap: var(--s4); }
+  .row { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: flex-start; }
+  .cap { font-size: var(--fs-1); color: var(--text-dim); text-align: center; margin-top: var(--s1); }
+  .cell { display: flex; flex-direction: column; align-items: center; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: var(--s3); }
+  .sw { display: flex; align-items: center; gap: var(--s2); font-size: var(--fs-1); }
+  .sw i { width: 28px; height: 28px; border-radius: 8px; display: inline-block; }
+  .stage { background: var(--table); border-radius: var(--r-btn); padding: var(--s4); }
+  .btnrow { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: center; }
+  .sheet-demo { position: relative; height: 300px; overflow: hidden; border-radius: var(--r-btn); background: var(--table); display: flex; align-items: flex-end; }
+  .sheet-demo .sheet { max-height: none; }
+  .sw1 { background: var(--u-red); } .sw2 { background: var(--u-yellow); } .sw3 { background: var(--u-green); } .sw4 { background: var(--u-blue); }
+</style>
+</head>
+<body>
+<main class="sg">
+  <header>
+    <h1>سبعة وسبعة - دليل الأسلوب</h1>
+    <p class="dim">كل الكروت مرسومة بـ SVG من عندنا في <code>seven/cards.js</code>. لكل لون شكله الصغير (دائرة، مربع، مثلث، معيّن) ليُفرَّق بين الألوان بدون الاعتماد على اللون وحده.</p>
+  </header>
+
+  <section>
+    <h2>الألوان والأشكال</h2>
+    <div class="row">
+      <span class="sw"><i class="sw1"></i> أحمر · دائرة</span>
+      <span class="sw"><i class="sw2"></i> أصفر · مربع</span>
+      <span class="sw"><i class="sw3"></i> أخضر · مثلث</span>
+      <span class="sw"><i class="sw4"></i> أزرق · معيّن</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>تكبير للمراجعة</h2>
+    <div class="row" id="closeups"></div>
+  </section>
+
+  <section>
+    <h2>الأرقام 0 إلى 9 في الألوان الأربعة</h2>
+    <div class="stage"><div id="numbers" style="display:flex;flex-direction:column;gap:var(--s2)"></div></div>
+  </section>
+
+  <section>
+    <h2>الكروت الخاصة</h2>
+    <div class="stage"><div class="row" id="specials"></div></div>
+  </section>
+
+  <section>
+    <h2>الظهر والحجم المصغّر</h2>
+    <div class="row" id="backs"></div>
+    <h3 class="dim" style="margin:0">مكشوف مصغّراً (نتيجة الجولة)</h3>
+    <div class="row" id="minifaces" style="gap:var(--s1)"></div>
+  </section>
+
+  <section>
+    <h2>اليد على جوال 360</h2>
+    <div class="stage" style="max-width:360px;padding:var(--s2)">
+      <div class="sv-hand" id="hand" style="min-height:0"></div>
+      <div class="cap">الكروت الصالحة ترتفع بحلقة نحاسية، وغير الصالحة تبهت</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>مقعد الخصم، والأزرار، واختيار اللون</h2>
+    <div class="stage">
+      <div class="sv-opps" id="opps"></div>
+    </div>
+    <div class="stage">
+      <div class="btnrow">
+        <button class="primary">اسحب</button>
+        <button>احتفظ به</button>
+        <button class="primary" disabled>اسحب</button>
+        <button class="primary big">ارمه</button>
+      </div>
+    </div>
+    <div class="sheet-demo">
+      <div class="sheet">
+        <div class="sheet-head"><h2>اختر اللون</h2></div>
+        <div class="sv-colors">
+          <button class="red">أحمر</button><button class="yellow">أصفر</button><button class="green">أخضر</button><button class="blue">أزرق</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="/server/games/seven/config.js"></script>
+<script src="/server/games/seven/deck.js"></script>
+<script src="/seven/cards.js"></script>
+<script>
+(function () {
+  const D = SevenDeck, K = SevenCards, C = SevenConfig;
+  const $ = (id) => document.getElementById(id);
+  const make = (type, color, rank) => D.makeCard(type, color, rank);
+
+  function node(card, size, extra) {
+    const d = document.createElement('div');
+    d.className = K.cls(card) + ' ' + (size || '') + (extra ? ' ' + extra : '');
+    d.innerHTML = K.svg(card, size === 'mini');
+    return d;
+  }
+  function cell(card, size, caption) {
+    const c = document.createElement('div');
+    c.className = 'cell';
+    c.append(node(card, size));
+    if (caption) { const p = document.createElement('div'); p.className = 'cap'; p.textContent = caption; c.append(p); }
+    return c;
+  }
+
+  [make('num', 'red', 7), make('num', 'blue', 6), make('num', 'yellow', 9), make('skip', 'green'), make('reverse', 'red'), make('draw2', 'blue'), make('wild'), make('wild4')]
+    .forEach((c) => $('closeups').append(cell(c, 'xl', D.describe(c))));
+
+  C.COLORS.forEach((color) => {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.style.gap = 'var(--s2)';
+    row.style.flexWrap = 'nowrap';
+    row.style.overflowX = 'auto';
+    for (let r = 0; r <= 9; r++) row.append(node(make('num', color, r), ''));
+    $('numbers').append(row);
+  });
+
+  const sp = $('specials');
+  C.COLORS.forEach((color) => ['skip', 'reverse', 'draw2'].forEach((t) => sp.append(cell(make(t, color), '', D.describe(make(t, color))))));
+  sp.append(cell(make('wild'), '', 'لون'), cell(make('wild4'), '', '+4 لون'));
+
+  $('backs').append(cell(null, 'xl', 'الظهر'), cell(null, 'big', 'كبير'), cell(null, 'mid', 'متوسط'), cell(null, 'mini', 'مصغّر'));
+  [make('num', 'red', 5), make('num', 'yellow', 0), make('num', 'green', 9), make('num', 'blue', 8), make('skip', 'red'), make('reverse', 'green'), make('draw2', 'yellow'), make('wild'), make('wild4')]
+    .forEach((c) => $('minifaces').append(node(c, 'mid')));
+  [make('num', 'red', 5), make('num', 'yellow', 0), make('skip', 'red'), make('draw2', 'blue'), make('wild4')].forEach((c) => $('minifaces').append(node(c, 'mini')));
+
+  const hand = [make('num', 'red', 3), make('num', 'red', 9), make('skip', 'yellow'), make('draw2', 'green'), make('wild4'), make('num', 'blue', 0), make('num', 'blue', 7)];
+  hand.forEach((c, i) => $('hand').append(node(c, 'hand', i < 3 ? 'pick' : i > 4 ? 'dim' : '')));
+
+  [['سارة', 5, ''], ['أحمد', 3, ' turn'], ['علي', 8, ' off']].forEach((o) => {
+    const d = document.createElement('div');
+    d.className = 'sv-opp' + o[2];
+    const nm = document.createElement('span');
+    nm.className = 'nm';
+    nm.textContent = o[0] + (o[2] === ' off' ? ' (غير متصل)' : '');
+    const cnt = document.createElement('span');
+    cnt.className = 'cnt';
+    cnt.append(node(null, 'mini'), String(o[1]));
+    d.append(nm, cnt);
+    $('opps').append(d);
+  });
+})();
+</script>
+</body>
+</html>

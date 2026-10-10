@@ -238,8 +238,8 @@
       case 'joined':
         // a code that belongs to the bank game: remember the seat for that page and go there
         if (m.game && m.game !== 'screw') {
-          store('bank.session', { code: m.code, playerId: m.playerId, name: S.name });
-          location.replace('/bank.html?room=' + m.code);
+          store(m.game + '.session', { code: m.code, playerId: m.playerId, name: S.name });
+          location.replace('/' + m.game + '.html?room=' + m.code);
           return;
         }
         S.lost = null;

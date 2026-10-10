@@ -22,6 +22,8 @@ const MSG = {
   unknownGame: 'لعبة غير معروفة.',
   wrongGame: 'هذه الحركة ليست من هذه اللعبة.',
   roomOtherGame: 'هذه الغرفة للعبة أخرى.',
+  badToken: 'هذا الرمز غير متاح.',
+  tokenTaken: 'هذا الرمز اختاره لاعب آخر.',
 };
 
 function createRooms(opts) {
@@ -76,7 +78,7 @@ function createRooms(opts) {
 
   function roster(room) {
     return room.players.map(function (p) {
-      return { id: p.seat, name: p.name, connected: !!p.conn, isHost: p.seat === room.hostSeat };
+      return { id: p.seat, name: p.name, connected: !!p.conn, isHost: p.seat === room.hostSeat, token: p.token || null };
     });
   }
 
@@ -226,6 +228,12 @@ function createRooms(opts) {
     const player = {
       seat: 'p' + room.seq, secret: crypto.randomUUID(), name: name, conn: null, graceTimer: null,
     };
+    // games with pieces: everybody starts with the first free one and may change it in the lobby
+    const tokens = gameOf(room).tokens;
+    if (tokens) {
+      const used = room.players.map(function (p) { return p.token; });
+      player.token = tokens.find(function (t) { return used.indexOf(t) < 0; }) || null;
+    }
     room.players.push(player);
     return player;
   }
@@ -284,7 +292,20 @@ function createRooms(opts) {
     broadcastRoom(room);
   };
 
-  handlers.start_game = function (conn) {
+  // lobby only: pick a piece (games that have pieces), one per player in the room
+  handlers.set_token = function (conn, m) {
+    const room = conn.room;
+    if (!room) return err(conn, MSG.notIn);
+    if (started(room)) return err(conn, MSG.alreadyStarted);
+    const tokens = gameOf(room).tokens;
+    if (!tokens || typeof m.token !== 'string' || tokens.indexOf(m.token) < 0) return err(conn, MSG.badToken);
+    const me = byConn(room, conn);
+    if (room.players.some(function (p) { return p !== me && p.token === m.token; })) return err(conn, MSG.tokenTaken);
+    me.token = m.token;
+    broadcastRoom(room);
+  };
+
+  handlers.start_game = function (conn, m) {
     const room = conn.room;
     if (!room) return err(conn, MSG.notIn);
     const me = byConn(room, conn);
@@ -296,9 +317,12 @@ function createRooms(opts) {
       return !!p.conn;
     });
     if (room.players.length < gameOf(room).minPlayers) return err(conn, MSG.needPlayers);
-    const g = gameOf(room).create(room.players.map(function (p) { return p.seat; }));
+    const game = gameOf(room);
+    // host options (e.g. number of rounds): the adapter picks only what it understands
+    const options = game.startOptions ? game.startOptions(m) : undefined;
+    const g = game.create(room.players.map(function (p) { return p.seat; }), options);
     if (g.error) return err(conn, g.error);
-    commit(room, { state: g.state, events: [], privates: [] });
+    commit(room, { state: g.state, events: g.events || [], privates: [] });
     broadcastRoom(room);
   };
 

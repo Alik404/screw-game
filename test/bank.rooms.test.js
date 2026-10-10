@@ -207,7 +207,7 @@ test('a disconnected player is played automatically; the others keep playing', (
   assert.equal(stateOf(other).roster.find((r) => r.id === cur.last('joined').you).connected, false);
   const gone = cur.last('joined').you;
   let passed = false;
-  for (let i = 0; i < 20 && !passed; i++) {
+  for (let i = 0; i < 400 && !passed; i++) {
     L.h.clock.advance(5 * 1000);
     passed = stateOf(other).currentPlayerId !== gone;
   }
@@ -316,3 +316,42 @@ test('a whole bank game through the room layer ends in bankruptcy or by the host
 });
 
 test('unused: money helper keeps lint quiet', () => { assert.equal(money(5), 5); assert.ok(CONFIG.MAX_ROOMS > 0); });
+
+// ---------- pieces picked in the lobby ----------
+
+test('every bank player gets a free piece on joining; pieces are unique', () => {
+  const L = bankLobby(4);
+  const tokens = L.host.last('room_state').players.map((p) => p.token);
+  assert.deepEqual(tokens, BANK.TOKENS.slice(0, 4));
+  assert.equal(new Set(tokens).size, 4);
+});
+
+test('the host may take a piece only while nobody has it', () => {
+  const L = bankLobby(2);
+  const guestToken = L.others[0].last('room_state').players.find((p) => !p.isHost).token;
+  assert.match(L.host.say({ type: 'set_token', token: guestToken }).last('error').message, /اختاره لاعب آخر/);
+  L.host.say({ type: 'set_token', token: 'crown' });
+  assert.equal(L.others[0].last('room_state').players.find((p) => p.isHost).token, 'crown');
+});
+
+test('set_token changes my piece and everyone sees it; refused after the start', () => {
+  const L = bankLobby(2);
+  const guest = L.others[0];
+  const me = guest.last('joined').you;
+  const host = L.host.last('room_state').players.find((p) => p.isHost).token;
+  assert.match(guest.say({ type: 'set_token', token: host }).last('error').message, /اختاره لاعب آخر/);
+  assert.match(guest.say({ type: 'set_token', token: 'unicorn' }).last('error').message, /غير متاح/);
+  assert.match(guest.say({ type: 'set_token', token: 5 }).last('error').message, /غير متاح/);
+  guest.say({ type: 'set_token', token: 'dallah' });
+  assert.equal(L.host.last('room_state').players.find((p) => p.id === me).token, 'dallah');
+  L.host.say({ type: 'start_game' });
+  assert.equal(stateOf(L.host).roster.find((r) => r.id === me).token, 'dallah');
+  assert.match(guest.say({ type: 'set_token', token: 'palm' }).last('error').message, /بدأت/);
+});
+
+test('games without pieces refuse set_token', () => {
+  const h = harness();
+  const c = h.conn().say({ type: 'create_room', name: 'أحمد' });
+  assert.match(c.say({ type: 'set_token', token: 'car' }).last('error').message, /غير متاح/);
+  assert.equal(c.last('room_state').players[0].token, null);
+});

@@ -67,3 +67,12 @@ body.portal { min-height: 100dvh; }
 .pt-token.b { background: var(--p2); top: 52px; inset-inline-start: calc(50% - 58px); }
 @media (prefers-reduced-motion: no-preference) { .pt-token { animation: pt-hop 2.2s ease-in-out infinite; } .pt-token.b { animation-delay: 1.1s; } }
 @keyframes pt-hop { 50% { transform: translateY(-5px); } }
+
+/* seven art: four tilted cards */
+.pt-seven { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.pt-ucard { position: absolute; width: 62px; height: 87px; border-radius: 8px; border: 4px solid var(--paper); box-shadow: var(--shadow-card); display: grid; place-items: center; font-family: var(--font-display); font-size: var(--fs-4); color: var(--paper); background: var(--cc); }
+.pt-ucard.red { --cc: var(--u-red); } .pt-ucard.yellow { --cc: var(--u-yellow); color: var(--u-ink); } .pt-ucard.green { --cc: var(--u-green); } .pt-ucard.blue { --cc: var(--u-blue); }
+.pt-ucard:nth-child(1) { transform: translateX(78px) rotate(-18deg); }
+.pt-ucard:nth-child(2) { transform: translateX(26px) rotate(-6deg); z-index: 1; }
+.pt-ucard:nth-child(3) { transform: translateX(-26px) rotate(6deg); z-index: 2; }
+.pt-ucard:nth-child(4) { transform: translateX(-78px) rotate(18deg); z-index: 3; }
