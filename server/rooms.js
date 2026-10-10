@@ -2,14 +2,7 @@
 // a "conn" is any object with send(obj) and close(). Timers are injectable for tests.
 const crypto = require('node:crypto');
 const CONFIG = require('./config');
-const E = require('./engine');
-
-const GAME_ACTIONS = [
-  'ready', 'draw', 'swap_drawn', 'discard_drawn', 'take_discard', 'match',
-  'use_ability', 'skip_ability', 'call_screw',
-];
-// The only fields copied from a client message into an engine action.
-const ACTION_FIELDS = ['type', 'slot', 'targetPlayerId', 'targetSlot', 'mode', 'slots', 'picks'];
+const GAMES = require('./games');
 
 const MSG = {
   badMessage: 'رسالة غير صالحة.',
@@ -25,6 +18,10 @@ const MSG = {
   needPlayers: 'تحتاج إلى لاعبَين على الأقل للبدء.',
   alreadyStarted: 'اللعبة بدأت بالفعل.',
   notStarted: 'اللعبة لم تبدأ بعد.',
+  wrongPhase: 'هذه الحركة غير متاحة الآن.',
+  unknownGame: 'لعبة غير معروفة.',
+  wrongGame: 'هذه الحركة ليست من هذه اللعبة.',
+  roomOtherGame: 'هذه الغرفة للعبة أخرى.',
 };
 
 function createRooms(opts) {
@@ -73,6 +70,16 @@ function createRooms(opts) {
     return room.engine !== null;
   }
 
+  function gameOf(room) {
+    return GAMES[room.game];
+  }
+
+  function roster(room) {
+    return room.players.map(function (p) {
+      return { id: p.seat, name: p.name, connected: !!p.conn, isHost: p.seat === room.hostSeat };
+    });
+  }
+
   // ---------- outgoing ----------
 
   function roomStateMsg(room) {
@@ -80,10 +87,9 @@ function createRooms(opts) {
       type: 'room_state',
       code: room.code,
       hostId: room.hostSeat,
+      game: room.game,
       phase: started(room) ? 'playing' : 'lobby',
-      players: room.players.map(function (p) {
-        return { id: p.seat, name: p.name, connected: !!p.conn, isHost: p.seat === room.hostSeat };
-      }),
+      players: roster(room),
     };
   }
 
@@ -92,22 +98,25 @@ function createRooms(opts) {
     connected(room).forEach(function (p) { sendTo(p.conn, msg); });
   }
 
-  function timerInfo(room) {
-    if (!room.timer) return null;
-    return { kind: room.timer.kind, endsAt: room.timer.endsAt, now: now() };
+  // the countdown the player sees (the first one) and all running ones
+  function timerList(room) {
+    return room.timerOrder.filter(function (k) { return room.timers[k]; }).map(function (k) {
+      const t = room.timers[k];
+      return { kind: t.kind, endsAt: t.endsAt, now: now() };
+    });
   }
 
   // Each player gets their own personalised copy; the secret playerId is never included.
   function gameStateMsg(room, player) {
-    const v = E.viewFor(room.engine, player.seat);
-    v.players = v.players.map(function (vp) {
-      const rp = room.players.find(function (p) { return p.seat === vp.id; });
-      vp.name = rp.name;
-      vp.connected = !!rp.conn;
-      vp.isHost = rp.seat === room.hostSeat;
-      return vp;
-    });
-    v.timer = timerInfo(room);
+    const g = gameOf(room);
+    const v = g.view(room.engine, player.seat);
+    const ros = roster(room);
+    g.decorate(v, ros);
+    v.roster = ros;
+    v.game = room.game;
+    const list = timerList(room);
+    v.timer = list[0] || null;
+    v.timers = list;
     v.type = 'game_state';
     return v;
   }
@@ -123,52 +132,45 @@ function createRooms(opts) {
   // ---------- timers (server is the only clock) ----------
 
   function clearGameTimer(room) {
-    if (room.timer) clearTimer(room.timer.handle);
-    room.timer = null;
+    Object.keys(room.timers).forEach(function (k) { clearTimer(room.timers[k].handle); });
+    room.timers = {};
+    room.timerOrder = [];
   }
 
+  // Keep exactly the countdowns the game wants: same key = same running clock, new key = restart.
   function scheduleTimer(room) {
-    const s = room.engine;
-    let kind = null;
-    let key = null;
-    let seconds = 0;
-    if (s && s.phase === 'peek') {
-      kind = 'peek'; key = 'peek:' + s.round; seconds = CONFIG.INITIAL_PEEK_SECONDS;
-    } else if (s && s.phase === 'turn') {
-      kind = 'turn'; key = 'turn:' + s.round + ':' + s.turnCount; seconds = CONFIG.TURN_SECONDS;
-    }
-    if (!key || room.dead) { clearGameTimer(room); return; }
-    if (room.timer && room.timer.key === key) return; // same turn: keep the running clock
-    clearGameTimer(room);
-    const timer = { key: key, kind: kind, endsAt: now() + seconds * 1000, handle: null };
-    timer.handle = setTimer(function () {
-      if (room.timer !== timer) return;
-      room.timer = null;
-      const r = kind === 'peek' ? E.forceStartPlay(room.engine) : E.autoPlay(room.engine);
-      if (r.error) { scheduleTimer(room); return; }
-      commit(room, r);
-    }, seconds * 1000);
-    room.timer = timer;
+    if (room.dead || !room.engine) { clearGameTimer(room); return; }
+    const want = gameOf(room).timers(room.engine);
+    const wantKinds = {};
+    want.forEach(function (w) { wantKinds[w.kind] = w; });
+    Object.keys(room.timers).forEach(function (k) {
+      if (!wantKinds[k] || wantKinds[k].key !== room.timers[k].key) {
+        clearTimer(room.timers[k].handle);
+        delete room.timers[k];
+      }
+    });
+    room.timerOrder = want.map(function (w) { return w.kind; });
+    want.forEach(function (w) {
+      if (room.timers[w.kind]) return;
+      const timer = { key: w.key, kind: w.kind, endsAt: now() + w.seconds * 1000, handle: null };
+      timer.handle = setTimer(function () {
+        if (room.timers[w.kind] !== timer) return;
+        delete room.timers[w.kind];
+        const r = gameOf(room).timeout(room.engine, w.kind);
+        if (r.error) { scheduleTimer(room); return; }
+        commit(room, r);
+      }, w.seconds * 1000);
+      room.timers[w.kind] = timer;
+    });
   }
 
   // ---------- applying an engine result ----------
 
   function commit(room, result) {
+    const g = gameOf(room);
     room.engine = result.state;
-    result.events.forEach(function (ev) {
-      if (ev.type === 'round_end') {
-        const r = ev.result;
-        broadcast(room, {
-          type: 'round_result', round: r.round, hands: r.hands, sums: r.sums, scores: r.scores,
-          totals: r.totals, screwCaller: r.screwCaller, minIds: r.minIds, multiplied: r.multiplied,
-        });
-      } else if (ev.type === 'game_over') {
-        broadcast(room, { type: 'game_over', totals: ev.totals, winnerIds: ev.winnerIds });
-      } else {
-        broadcast(room, { type: 'event', event: ev });
-      }
-    });
-    result.privates.forEach(function (pv) {
+    result.events.forEach(function (ev) { broadcast(room, g.messageFor(ev)); });
+    (result.privates || []).forEach(function (pv) {
       const p = room.players.find(function (x) { return x.seat === pv.playerId; });
       if (p && p.conn) {
         sendTo(p.conn, { type: 'private_card', reason: pv.reason, seconds: pv.seconds, reveals: pv.reveals });
@@ -216,7 +218,7 @@ function createRooms(opts) {
     player.conn = conn;
     conn.room = room;
     touchIdle(room);
-    sendTo(conn, { type: 'joined', code: room.code, playerId: player.secret, you: player.seat });
+    sendTo(conn, { type: 'joined', code: room.code, playerId: player.secret, you: player.seat, game: room.game });
   }
 
   function addPlayer(room, name) {
@@ -236,9 +238,12 @@ function createRooms(opts) {
     if (conn.room) return err(conn, MSG.alreadyIn);
     const name = cleanName(m.name);
     if (!name) return err(conn, MSG.nameRequired);
+    const game = m.game === undefined ? 'screw' : m.game;
+    if (typeof game !== 'string' || !Object.prototype.hasOwnProperty.call(GAMES, game)) return err(conn, MSG.unknownGame);
     if (rooms.size >= CONFIG.MAX_ROOMS) return err(conn, MSG.serverFull, 'SERVER_FULL');
     const room = {
-      code: newCode(), hostSeat: null, players: [], seq: 0, engine: null, timer: null, idle: null,
+      code: newCode(), game: game, hostSeat: null, players: [], seq: 0, engine: null,
+      timers: {}, timerOrder: [], idle: null,
     };
     rooms.set(room.code, room);
     const player = addPlayer(room, name);
@@ -268,7 +273,7 @@ function createRooms(opts) {
       }
     }
     if (started(room)) return err(conn, MSG.started);
-    if (room.players.length >= CONFIG.MAX_PLAYERS) return err(conn, MSG.full);
+    if (room.players.length >= gameOf(room).maxPlayers) return err(conn, MSG.full);
     const name = cleanName(m.name);
     if (!name) return err(conn, MSG.nameRequired);
     const taken = room.players.some(function (p) { return p.name.toLowerCase() === name.toLowerCase(); });
@@ -290,44 +295,46 @@ function createRooms(opts) {
       if (!p.conn && p.graceTimer) clearTimer(p.graceTimer);
       return !!p.conn;
     });
-    if (room.players.length < CONFIG.MIN_PLAYERS) return err(conn, MSG.needPlayers);
-    const g = E.createGame(room.players.map(function (p) { return p.seat; }));
+    if (room.players.length < gameOf(room).minPlayers) return err(conn, MSG.needPlayers);
+    const g = gameOf(room).create(room.players.map(function (p) { return p.seat; }));
     if (g.error) return err(conn, g.error);
     commit(room, { state: g.state, events: [], privates: [] });
     broadcastRoom(room);
   };
 
-  handlers.next_round = function (conn) {
-    const room = conn.room;
-    if (!room) return err(conn, MSG.notIn);
-    const me = byConn(room, conn);
-    if (me.seat !== room.hostSeat) return err(conn, MSG.hostOnly);
-    if (!started(room)) return err(conn, MSG.notStarted);
-    const r = E.act(room.engine, me.seat, { type: 'next_round' });
-    if (r.error) return err(conn, r.error);
-    commit(room, r);
-  };
+  // host-only actions that belong to a particular game (next round, new game, end early)
+  function hostAction(name) {
+    return function (conn) {
+      const room = conn.room;
+      if (!room) return err(conn, MSG.notIn);
+      const me = byConn(room, conn);
+      if (me.seat !== room.hostSeat) return err(conn, MSG.hostOnly);
+      if (!started(room)) return err(conn, MSG.notStarted);
+      const fn = gameOf(room).host[name];
+      if (!fn) return err(conn, MSG.wrongPhase);
+      const r = fn(room.engine, me.seat);
+      if (r.error) return err(conn, r.error);
+      commit(room, { state: r.state, events: r.events || [], privates: r.privates || [] });
+    };
+  }
+  handlers.next_round = hostAction('next_round');
+  handlers.new_game = hostAction('new_game');
+  handlers.end_game = hostAction('end_game');
 
-  handlers.new_game = function (conn) {
-    const room = conn.room;
-    if (!room) return err(conn, MSG.notIn);
-    const me = byConn(room, conn);
-    if (me.seat !== room.hostSeat) return err(conn, MSG.hostOnly);
-    if (!started(room) || room.engine.phase !== 'gameOver') return err(conn, E.ERR.wrongPhase);
-    const g = E.newGame(room.engine);
-    if (g.error) return err(conn, g.error);
-    commit(room, { state: g.state, events: [], privates: [] });
-  };
-
-  GAME_ACTIONS.forEach(function (type) {
+  // in-game actions: every game's action names are routed here, then checked against the room's game
+  const allActions = {};
+  Object.keys(GAMES).forEach(function (id) { GAMES[id].actions.forEach(function (t) { allActions[t] = true; }); });
+  Object.keys(allActions).forEach(function (type) {
     handlers[type] = function (conn, m) {
       const room = conn.room;
       if (!room) return err(conn, MSG.notIn);
+      const g = gameOf(room);
+      if (g.actions.indexOf(type) < 0) return err(conn, MSG.wrongGame);
       if (!started(room)) return err(conn, MSG.notStarted);
       const me = byConn(room, conn);
       const action = {};
-      ACTION_FIELDS.forEach(function (f) { if (m[f] !== undefined) action[f] = m[f]; });
-      const r = E.act(room.engine, me.seat, action);
+      g.fields.forEach(function (f) { if (m[f] !== undefined) action[f] = m[f]; });
+      const r = g.act(room.engine, me.seat, action);
       if (r.error) return err(conn, r.error);
       commit(room, r);
     };

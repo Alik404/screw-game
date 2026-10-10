@@ -250,3 +250,34 @@ button.bk-tprop.on { background: color-mix(in srgb, var(--gc) 35%, var(--table-d
   .bk-boardwrap .bk-board { width: min(100%, calc(100dvh - 48px - 32px)); }
 }
 @media (prefers-reduced-motion: reduce) { .bk-tok.cur { animation: none; } }
+
+/* ---------- home, lobby, shells ---------- */
+.bk-shell { max-width: 560px; margin: 0 auto; height: 100dvh; display: flex; flex-direction: column; position: relative; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+.bk-gamehost { position: relative; max-width: 1200px; margin: 0 auto; }
+.bk-home { justify-content: center; gap: var(--s6); }
+.bk-hero { display: flex; flex-direction: column; align-items: center; gap: var(--s4); padding: var(--s6) 0 0; }
+.bk-logo.big { transform: rotate(-4deg); }
+.bk-logo.big span { font-size: var(--fs-4); }
+.bk-logo.big b { font-size: 72px; }
+.bk-hero .bk-dice { gap: var(--s3); }
+.bk-hero .bk-die { width: 56px; height: 56px; padding: 8px; border-radius: 12px; }
+.bk-topr { display: inline-flex; align-items: center; gap: var(--s1); }
+.bk-lobby-note { text-align: center; line-height: 1.7; }
+.bk-wait { display: flex; align-items: center; gap: var(--s3); color: var(--text-dim); min-height: 44px; }
+.bk-link { display: flex; align-items: center; justify-content: center; min-height: 48px; border: 1.5px solid var(--brass); border-radius: var(--r-btn); color: var(--text); text-decoration: none; }
+.bk-help .help-list { margin: 0; padding-inline-start: var(--s4); display: flex; flex-direction: column; gap: var(--s3); line-height: 1.7; }
+.sheet .bk-note { margin-bottom: var(--s2); }
+.danger.solid { background: var(--red); color: var(--text); border-color: var(--red); }
+.menu-list button.danger { color: var(--red); border-color: var(--red); }
+
+/* a drawn card (chance / chest) */
+.bk-cardnote { border-radius: var(--r-btn); padding: var(--s3) var(--s4); background: var(--paper); color: var(--ink); box-shadow: var(--shadow-card); border-inline-start: 6px solid var(--orange); animation: bk-pop .3s cubic-bezier(.2, 1.3, .4, 1); }
+.bk-cardnote.chest { border-inline-start-color: var(--blue); }
+.bk-cardnote small { color: color-mix(in srgb, var(--ink) 60%, transparent); font-weight: 700; }
+.bk-cardnote p { margin: var(--s1) 0 0; font-size: var(--fs-3); line-height: 1.6; font-weight: 500; }
+@keyframes bk-pop { from { transform: scale(.92); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .bk-cardnote { animation: none; } }
+
+.bk-top .icon-btn { width: 40px; height: 40px; min-height: 40px; }
+.bk-top .icon-btn .bk-ico { width: 24px; height: 24px; }
+.bk-top .icon-btn svg { width: 100%; height: 100%; }

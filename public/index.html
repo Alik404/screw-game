@@ -24,7 +24,7 @@
   </header>
 
   <a class="pt-back" id="resume" href="/screw.html" hidden>
-    <span>عندك غرفة <b>سكرو</b> مفتوحة <b id="resume-code"></b></span>
+    <span>عندك غرفة <b id="resume-game">سكرو</b> مفتوحة <b id="resume-code"></b></span>
     <span class="go">العودة للغرفة</span>
   </a>
 
@@ -45,15 +45,11 @@
         <div class="pt-token"></div><div class="pt-token b"></div>
         <div class="pt-dice" aria-hidden="true"></div>
       </div>
-      <div class="pt-title"><h2>بنك الحظ</h2><span class="pt-tag soon">قريباً</span></div>
+      <div class="pt-title"><h2>بنك الحظ</h2><span class="pt-tag live">متاحة الآن</span></div>
       <p class="pt-desc">لعبة عقارات في مناطق بغداد: ارمِ النرد، اشترِ الأراضي، ابنِ البيوت، زايد وتبادل، وأفلس خصومك.</p>
       <div class="pt-meta"><span>2 – 6 لاعبين</span><span>مزاد وتبادل ورهن</span><span>حتى الإفلاس</span></div>
       <div class="pt-actions">
-        <span class="pt-btn" aria-disabled="true" style="opacity:.5;cursor:default">اللعب الجماعي قيد التجهيز</span>
-        <div class="pt-btn row2">
-          <a href="/bank/preview.html">معاينة الشكل</a>
-          <a href="/bank/debug.html">جرّب القوانين وحدك</a>
-        </div>
+        <a class="pt-btn primary" href="/bank.html">العب بنك الحظ</a>
       </div>
     </article>
   </section>
@@ -97,12 +93,17 @@
     });
     // a saved screw room? offer a way back
     try {
-      const s = JSON.parse(localStorage.getItem('screw.session') || 'null');
-      if (s && s.code) {
-        document.getElementById('resume-code').textContent = s.code;
+      // a saved seat (card game or bank game) gets the shortcut
+      const pick = [['screw', 'سكرو', '/screw.html'], ['bank', 'بنك الحظ', '/bank.html']].map(function (g) {
+        const s = JSON.parse(localStorage.getItem(g[0] + '.session') || 'null');
+        return s && s.code ? { code: s.code, name: g[1], url: g[2] } : null;
+      }).filter(Boolean)[0];
+      if (pick) {
+        document.getElementById('resume-code').textContent = pick.code;
+        document.getElementById('resume-game').textContent = pick.name;
         const a = document.getElementById('resume');
         a.hidden = false;
-        a.href = '/screw.html?room=' + encodeURIComponent(s.code);
+        a.href = pick.url + '?room=' + encodeURIComponent(pick.code);
       }
     } catch (e) { /* storage unavailable: no shortcut */ }
   })();
