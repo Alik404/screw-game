@@ -317,11 +317,11 @@ button.bk-tprop.on { background: color-mix(in srgb, var(--gc) 35%, var(--table-d
 @container (min-width: 520px) { .bk-tok { width: 3.6cqw; height: 3.6cqw; padding: 0.55cqw; } }
 
 /* ---------- 3D board ---------- */
-.bk-board3d { position: relative; width: 100%; aspect-ratio: 10 / 9; /* the tilted board is wider than tall */ flex: none; border-radius: var(--r-sheet); overflow: hidden; touch-action: manipulation; }
+.bk-board3d { position: relative; width: 100%; aspect-ratio: 20 / 19; /* the tilted board is a little wider than tall */ flex: none; border-radius: var(--r-sheet); overflow: hidden; touch-action: manipulation; }
 .bk-board3d canvas { width: 100%; height: 100%; display: block; cursor: pointer; }
 .bk-boardwrap .bk-board3d { width: min(100%, calc(100dvh - 250px)); }
 .bk-3d-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: var(--s2); padding: var(--s3); pointer-events: none; }
-.bk-3d-event { font-size: var(--fs-1); color: var(--text); background: color-mix(in srgb, var(--table-deep) 80%, transparent); border-radius: 999px; padding: var(--s1) var(--s3); text-align: center; max-width: 92%; }
-.bk-3d-turn { display: inline-flex; align-items: center; gap: var(--s2); font-weight: 700; color: var(--text); background: var(--table-deep); border-radius: 999px; padding: var(--s1) var(--s3); }
+.bk-3d-event { margin-bottom: auto; font-size: var(--fs-1); color: var(--text); background: color-mix(in srgb, var(--table-deep) 80%, transparent); border-radius: 999px; padding: var(--s1) var(--s3); text-align: center; max-width: 92%; }
+.bk-3d-turn { margin-top: auto; display: inline-flex; align-items: center; gap: var(--s2); font-weight: 700; color: var(--text); background: var(--table-deep); border-radius: 999px; padding: var(--s1) var(--s3); }
 .bk-3d-turn .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--pc); }
-@media (min-width: 900px) { .bk-boardwrap .bk-board3d { width: min(100%, calc(100dvh - 48px - 16px)); } }
+@media (min-width: 900px) { .bk-boardwrap .bk-board3d { width: 100%; height: calc(100dvh - 48px - 16px); aspect-ratio: auto; } }

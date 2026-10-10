@@ -15,15 +15,19 @@ const dur = (d) => (REDUCED ? 0 : d);
 // ---------- colours come from tokens.css ----------
 function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
 const COL = {};
-['--board', '--board-line', '--ink', '--paper', '--brass', '--table', '--table-glow', '--table-deep', '--red', '--blue', '--green', '--orange', '--text']
+['--board', '--board-line', '--board-edge', '--wood', '--wood-dark', '--ink', '--paper', '--brass', '--table', '--table-glow', '--table-deep', '--red', '--blue', '--green', '--orange', '--text', '--text-dim']
   .forEach((n) => { COL[n] = cssVar(n); });
 for (let g = 1; g <= 8; g++) COL['--g' + g] = cssVar('--g' + g);
 for (let p = 1; p <= 6; p++) COL['--p' + p] = cssVar('--p' + p);
 
-// ---------- board layout: the same 11x11 grid as the 2D board, in texture pixels ----------
+// ---------- board layout: the same 11x11 grid as the 2D board ----------
+// All drawing uses TEX logical pixels; the canvas itself is SCALE times bigger for sharp text.
 const TEX = 2048;
-const WORLD = 10; // board top is a 10x10 square centred on the origin
+const WORLD = 10; // board is a 10x10 square centred on the origin
 const UNIT = TEX / (1.55 * 2 + 9);
+const GAP = 5; // logical pixels between two raised squares (each side)
+const TILE_H = 0.12; // height of a square
+const OWNED_H = 0.26; // owned squares stand higher
 function track(n) {
   if (n === 1) return [0, 1.55 * UNIT];
   if (n === 11) return [TEX - 1.55 * UNIT, 1.55 * UNIT];
@@ -35,9 +39,10 @@ function cellRect(i) {
   const [y, h] = track(p.r);
   return { x, y, w, h, side: p.side };
 }
+const inset = (r, d) => ({ x: r.x + d, y: r.y + d, w: r.w - 2 * d, h: r.h - 2 * d, side: r.side });
 // the colour band sits on the side that faces the centre of the board
 function bandRect(r) {
-  const t = 0.26;
+  const t = 0.2;
   switch (r.side) {
     case 'b': return { x: r.x, y: r.y, w: r.w, h: r.h * t };
     case 't': return { x: r.x, y: r.y + r.h * (1 - t), w: r.w, h: r.h * t };
@@ -59,11 +64,12 @@ function bodyRect(r, hasBand) {
 }
 const toWorld = (px, py) => new THREE.Vector3(-WORLD / 2 + (px / TEX) * WORLD, 0, -WORLD / 2 + (py / TEX) * WORLD);
 const centreOf = (r) => toWorld(r.x + r.w / 2, r.y + r.h / 2);
+const CENTRE = { x: 1.55 * UNIT, y: 1.55 * UNIT, w: TEX - 3.1 * UNIT, h: TEX - 3.1 * UNIT };
 
 // ---------- icon images (the same drawings as the 2D board) ----------
 const ICON_COLOR = { chance: COL['--orange'], chest: COL['--blue'], tax: COL['--red'], go: COL['--green'], jail: COL['--ink'], parking: COL['--brass'], gotojail: COL['--blue'], station: COL['--ink'], utility: COL['--ink'] };
 function svgImage(paths, stroke) {
-  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="128" height="128" fill="none" stroke="' + stroke +
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="192" height="192" fill="none" stroke="' + stroke +
     '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + paths + '</svg>';
   const img = new Image();
   img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
@@ -79,14 +85,24 @@ const ready = (async () => {
       jobs.push(svgImage(U.ICON_PATHS[name], ICON_COLOR[sq.type] || COL['--ink']).then((img) => { images.square[name] = img; }));
     }
   });
-  Object.keys(U.TOKEN_PATHS).forEach((t) => jobs.push(svgImage(U.TOKEN_PATHS[t], '#ffffff').then((img) => { images.token[t] = img; })));
+  Object.keys(U.TOKEN_PATHS).forEach((t) => jobs.push(svgImage(U.TOKEN_PATHS[t], COL['--paper']).then((img) => { images.token[t] = img; })));
   jobs.push(document.fonts ? Promise.all([document.fonts.load('700 30px Tajawal'), document.fonts.load('150px Lalezar')]).catch(() => null) : null);
   await Promise.all(jobs);
 })();
 
-// ---------- the board texture (redrawn only when ownership / buildings change) ----------
+// ---------- the printed texture: every square top and the centre ----------
+let renderer = null;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+} catch (e) {
+  renderer = null;
+}
+const supported = !!renderer;
+// big screens get a 4096 texture, phones 3072 (sharp text without eating the phone's memory)
+const maxTex = supported ? renderer.capabilities.maxTextureSize : 2048;
+const SCALE = Math.min(maxTex / TEX, Math.min(window.innerWidth, window.innerHeight) >= 700 ? 2 : 1.5);
 const canvas = document.createElement('canvas');
-canvas.width = canvas.height = TEX;
+canvas.width = canvas.height = Math.round(TEX * SCALE);
 const ctx = canvas.getContext('2d');
 
 function roundRect(x, y, w, h, r) {
@@ -99,7 +115,7 @@ function roundRect(x, y, w, h, r) {
   ctx.closePath();
 }
 
-function wrapText(text, maxW) {
+function wrapWords(text, maxW) {
   const words = text.split(' ');
   const lines = [];
   let line = '';
@@ -108,114 +124,184 @@ function wrapText(text, maxW) {
     if (ctx.measureText(t).width > maxW && line) { lines.push(line); line = w; } else line = t;
   });
   if (line) lines.push(line);
-  return lines.slice(0, 2);
+  return lines;
+}
+// the biggest font (from sizes) that fits the text in maxLines lines of maxW
+function fitName(text, maxW, sizes, maxLines, maxH) {
+  for (const s of sizes) {
+    ctx.font = '700 ' + s + 'px Tajawal, sans-serif';
+    const lines = wrapWords(text, maxW);
+    if (lines.length <= maxLines && lines.length * s * 1.12 <= maxH && lines.every((l) => ctx.measureText(l).width <= maxW)) return { size: s, lines: lines };
+  }
+  const s = sizes[sizes.length - 1];
+  ctx.font = '700 ' + s + 'px Tajawal, sans-serif';
+  return { size: s, lines: wrapWords(text, maxW).slice(0, maxLines) };
+}
+function fitLine(text, maxW, size, weight) {
+  let s = size;
+  ctx.font = weight + ' ' + s + 'px Tajawal, sans-serif';
+  while (s > 16 && ctx.measureText(text).width > maxW) { s -= 2; ctx.font = weight + ' ' + s + 'px Tajawal, sans-serif'; }
+  let t = text;
+  while (t.length > 1 && ctx.measureText(t).width > maxW) t = t.slice(0, -1);
+  return t === text ? t : t + '…';
 }
 
 function playerColor(view, id) { return COL['--p' + (view.playerIds.indexOf(id) + 1)] || COL['--brass']; }
 
-function drawBoard(view, tokens) {
-  ctx.clearRect(0, 0, TEX, TEX);
-  // the centre: felt with a soft light, and the name of the game
-  const g = ctx.createRadialGradient(TEX / 2, TEX / 2, 60, TEX / 2, TEX / 2, TEX * 0.45);
-  g.addColorStop(0, COL['--table-glow']);
-  g.addColorStop(1, COL['--table']);
-  ctx.fillStyle = COL['--table-deep'];
+function drawCentre() {
+  const c = CENTRE;
+  ctx.fillStyle = COL['--wood-dark'];
   ctx.fillRect(0, 0, TEX, TEX);
+  const g = ctx.createRadialGradient(TEX / 2, TEX / 2, 40, TEX / 2, TEX / 2, c.w * 0.62);
+  g.addColorStop(0, COL['--table-glow']);
+  g.addColorStop(1, COL['--table-deep']);
   ctx.fillStyle = g;
-  roundRect(UNIT * 1.55 + 6, UNIT * 1.55 + 6, TEX - UNIT * 3.1 - 12, TEX - UNIT * 3.1 - 12, 28);
-  ctx.fill();
+  ctx.fillRect(c.x, c.y, c.w, c.h);
+  // a faint eight-point star lattice, like old Baghdadi tiles
   ctx.save();
-  ctx.translate(TEX / 2, TEX * 0.36);
-  ctx.rotate(-0.07);
+  ctx.beginPath();
+  ctx.rect(c.x, c.y, c.w, c.h);
+  ctx.clip();
+  ctx.strokeStyle = COL['--brass'];
+  ctx.globalAlpha = 0.09;
+  ctx.lineWidth = 3;
+  const step = 150;
+  for (let x = c.x + step / 2; x < c.x + c.w + step; x += step) {
+    for (let y = c.y + step / 2; y < c.y + c.h + step; y += step) {
+      for (const a of [0, Math.PI / 4]) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(a);
+        ctx.strokeRect(-44, -44, 88, 88);
+        ctx.restore();
+      }
+    }
+  }
+  ctx.restore();
+  // double brass border
+  ctx.strokeStyle = COL['--brass'];
+  ctx.globalAlpha = 0.55;
+  ctx.lineWidth = 5;
+  ctx.strokeRect(c.x + 30, c.y + 30, c.w - 60, c.h - 60);
+  ctx.lineWidth = 2;
+  ctx.strokeRect(c.x + 44, c.y + 44, c.w - 88, c.h - 88);
+  ctx.globalAlpha = 1;
+  // the name of the game
+  ctx.save();
+  ctx.translate(TEX / 2, TEX * 0.33);
   ctx.direction = 'rtl';
   ctx.textAlign = 'center';
-  ctx.fillStyle = COL['--table-deep'];
-  ctx.font = '170px Lalezar, Tajawal, sans-serif';
-  ctx.fillText('بنك الحظ', 6, 10);
+  ctx.textBaseline = 'middle';
+  ctx.font = '230px Lalezar, Tajawal, sans-serif';
+  ctx.fillStyle = COL['--wood-dark'];
+  ctx.fillText('بنك الحظ', 8, 12);
   ctx.fillStyle = COL['--brass'];
   ctx.fillText('بنك الحظ', 0, 0);
+  ctx.font = '600 52px Tajawal, sans-serif';
+  ctx.fillStyle = COL['--text-dim'];
+  ctx.fillText('عقارات بغداد', 0, 165);
   ctx.restore();
+}
 
-  SQ.forEach((sq, i) => {
-    const r0 = cellRect(i);
-    const r = { x: r0.x + 5, y: r0.y + 5, w: r0.w - 10, h: r0.h - 10, side: r0.side };
-    const pr = view.props[i];
-    const owner = pr && pr.owner;
-    roundRect(r.x, r.y, r.w, r.h, 12);
-    ctx.fillStyle = COL['--board'];
-    ctx.fill();
-    if (owner) {
-      ctx.save();
-      ctx.globalAlpha = 0.32;
-      ctx.fillStyle = playerColor(view, owner);
-      ctx.fill();
-      ctx.restore();
-    }
-    const band = sq.group ? bandRect(r) : null;
-    if (band) {
-      ctx.save();
-      roundRect(r.x, r.y, r.w, r.h, 12);
-      ctx.clip();
-      ctx.fillStyle = COL['--g' + sq.group];
-      ctx.fillRect(band.x, band.y, band.w, band.h);
-      ctx.restore();
-    }
-    if (owner) {
-      roundRect(r.x + 4, r.y + 4, r.w - 8, r.h - 8, 10);
-      ctx.lineWidth = 9;
-      ctx.strokeStyle = playerColor(view, owner);
-      ctx.stroke();
-    }
-    // name, price and icon
-    const body = bodyRect(r, !!band);
-    const corner = r.side === 'corner';
-    const ic = U.squareIcon(sq);
-    const img = ic && images.square[ic];
-    let y = body.y + body.h * (corner ? 0.3 : 0.22);
-    if (img) {
-      const s = corner ? body.w * 0.42 : Math.min(body.w, body.h) * 0.32;
-      ctx.drawImage(img, body.x + body.w / 2 - s / 2, y - s / 2, s, s);
-      y += s * 0.6 + 14;
-    } else {
-      y = body.y + body.h * 0.3;
-    }
+function drawSquare(view, tokens, names, sq, i) {
+  const r = inset(cellRect(i), GAP);
+  const pr = view.props[i];
+  const owner = pr && pr.owner;
+  const oc = owner ? playerColor(view, owner) : null;
+  const corner = r.side === 'corner';
+  ctx.fillStyle = COL['--board'];
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  const band = sq.group ? bandRect(r) : null;
+  if (band) {
+    ctx.fillStyle = COL['--g' + sq.group];
+    ctx.fillRect(band.x, band.y, band.w, band.h);
+  }
+  let body = bodyRect(r, !!band);
+  // owned: the square takes a wash of the owner's colour and a strip with the owner's name
+  if (owner) {
+    ctx.save();
+    ctx.globalAlpha = 0.2;
+    ctx.fillStyle = oc;
+    ctx.fillRect(body.x, body.y, body.w, body.h);
+    ctx.restore();
+    const sh = Math.round(Math.min(body.h * 0.27, 60));
+    ctx.fillStyle = oc;
+    ctx.fillRect(body.x, body.y + body.h - sh, body.w, sh);
     ctx.direction = 'rtl';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = COL['--ink'];
-    ctx.font = (corner ? '700 34px' : '700 27px') + ' Tajawal, sans-serif';
-    wrapText(sq.name, body.w - 18).forEach((line, k) => ctx.fillText(line, body.x + body.w / 2, y + k * (corner ? 38 : 30)));
-    if (sq.price) {
-      ctx.font = '500 24px Tajawal, sans-serif';
-      ctx.globalAlpha = 0.7;
-      ctx.fillText(String(sq.price), body.x + body.w / 2, body.y + body.h - 26);
-      ctx.globalAlpha = 1;
-    }
-    // owner badge on the band (or in the corner for stations and utilities)
-    if (owner) {
-      const bx = band ? band.x + band.w / 2 : r.x + 34;
-      const by = band ? band.y + band.h / 2 : r.y + 34;
-      const rad = band ? Math.min(band.w, band.h) * 0.4 : 26;
-      ctx.beginPath();
-      ctx.arc(bx, by, rad, 0, Math.PI * 2);
-      ctx.fillStyle = playerColor(view, owner);
-      ctx.fill();
-      ctx.lineWidth = 5;
-      ctx.strokeStyle = COL['--paper'];
-      ctx.stroke();
-      const t = images.token[tokens[owner]];
-      if (t) ctx.drawImage(t, bx - rad * 0.62, by - rad * 0.62, rad * 1.24, rad * 1.24);
-    }
-    if (pr && pr.mortgaged) {
-      ctx.save();
-      roundRect(r.x, r.y, r.w, r.h, 12);
-      ctx.clip();
-      ctx.strokeStyle = 'rgba(31,36,48,.28)';
-      ctx.lineWidth = 7;
-      for (let k = -r.h; k < r.w; k += 22) { ctx.beginPath(); ctx.moveTo(r.x + k, r.y + r.h); ctx.lineTo(r.x + k + r.h, r.y); ctx.stroke(); }
-      ctx.restore();
-    }
-  });
+    const t = fitLine(names[owner] || '', body.w - 16, 34, '800');
+    ctx.fillText(t, body.x + body.w / 2, body.y + body.h - sh / 2 + 2);
+    body = { x: body.x, y: body.y, w: body.w, h: body.h - sh };
+  }
+  // icon, name and price (or "mortgaged"), stacked in the middle of the free space
+  const ic = U.squareIcon(sq);
+  const img = ic && images.square[ic];
+  const sub = pr && pr.mortgaged ? 'مرهون' : (!owner && sq.price ? String(sq.price) : '');
+  const subH = sub ? 36 : 0;
+  const gap = 6;
+  // short squares (the side columns) get a smaller icon so the name keeps its size
+  let iconS = img ? (corner ? body.w * 0.4 : Math.min(body.w, body.h) * (sq.group ? 0.3 : 0.36)) : 0;
+  if (img && !corner && body.h < 180) iconS = body.h * 0.24;
+  const room = body.h - 14 - (img ? iconS + gap : 0) - (sub ? subH + gap : 0);
+  const nm = corner ? fitName(sq.name, body.w - 24, [54, 48, 42, 36], 2, room) : fitName(sq.name, body.w - 14, [44, 40, 36, 32, 28, 24], 2, room);
+  const lineH = nm.size * 1.12;
+  const total = (img ? iconS + gap : 0) + nm.lines.length * lineH + (sub ? gap + subH : 0);
+  let y = body.y + (body.h - total) / 2;
+  const cx = body.x + body.w / 2;
+  if (img) { ctx.drawImage(img, cx - iconS / 2, y, iconS, iconS); y += iconS + gap; }
+  ctx.direction = 'rtl';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = COL['--ink'];
+  ctx.font = '700 ' + nm.size + 'px Tajawal, sans-serif';
+  nm.lines.forEach((line) => { ctx.fillText(line, cx, y + lineH / 2); y += lineH; });
+  if (sub) {
+    y += gap;
+    ctx.font = (pr && pr.mortgaged ? '800 ' : '700 ') + '34px Tajawal, sans-serif';
+    ctx.fillStyle = pr && pr.mortgaged ? COL['--red'] : COL['--ink'];
+    ctx.globalAlpha = pr && pr.mortgaged ? 1 : 0.72;
+    ctx.fillText(sub, cx, y + subH / 2);
+    ctx.globalAlpha = 1;
+  }
+  // owner badge with the owner's symbol on the colour band (top corner for stations and utilities)
+  if (owner) {
+    const bx = band ? band.x + band.w / 2 : r.x + 38;
+    const by = band ? band.y + band.h / 2 : r.y + 38;
+    const rad = band ? Math.min(band.w, band.h) * 0.46 : 30;
+    ctx.beginPath();
+    ctx.arc(bx, by, rad, 0, Math.PI * 2);
+    ctx.fillStyle = oc;
+    ctx.fill();
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = COL['--paper'];
+    ctx.stroke();
+    const t = images.token[tokens[owner]];
+    if (t) ctx.drawImage(t, bx - rad * 0.64, by - rad * 0.64, rad * 1.28, rad * 1.28);
+  }
+  if (pr && pr.mortgaged) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(r.x, r.y, r.w, r.h);
+    ctx.clip();
+    ctx.strokeStyle = COL['--ink'];
+    ctx.globalAlpha = 0.16;
+    ctx.lineWidth = 8;
+    for (let k = -r.h; k < r.w; k += 26) { ctx.beginPath(); ctx.moveTo(r.x + k, r.y + r.h); ctx.lineTo(r.x + k + r.h, r.y); ctx.stroke(); }
+    ctx.restore();
+  }
+  // a thin printed edge
+  ctx.strokeStyle = owner ? oc : COL['--board-line'];
+  ctx.lineWidth = owner ? 8 : 3;
+  ctx.strokeRect(r.x + ctx.lineWidth / 2, r.y + ctx.lineWidth / 2, r.w - ctx.lineWidth, r.h - ctx.lineWidth);
+}
+
+function drawBoard(view, tokens, names) {
+  ctx.setTransform(SCALE, 0, 0, SCALE, 0, 0);
+  ctx.clearRect(0, 0, TEX, TEX);
+  drawCentre();
+  SQ.forEach((sq, i) => drawSquare(view, tokens, names, sq, i));
   texture.needsUpdate = true;
   dirty = true;
 }
@@ -227,54 +313,106 @@ const overlay = document.createElement('div');
 overlay.className = 'bk-3d-overlay';
 host.append(overlay);
 
-let renderer = null;
-try {
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-} catch (e) {
-  renderer = null;
-}
-const supported = !!renderer;
-
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
+const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 120);
 const texture = new THREE.CanvasTexture(canvas);
 let dirty = true;
+const tiles = []; // one raised mesh per square, index = square number
+const heights = SQ.map(() => TILE_H);
+
+// map the top face of a box (or a plane) onto a rectangle of the texture
+function mapTop(geo, r, first) {
+  const uv = geo.attributes.uv;
+  for (let k = first; k < first + 4; k++) {
+    const u = uv.getX(k), v = uv.getY(k);
+    uv.setXY(k, (r.x + u * r.w) / TEX, 1 - (r.y + (1 - v) * r.h) / TEX);
+  }
+  uv.needsUpdate = true;
+}
 
 if (supported) {
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  // render a little above the screen's pixel ratio on plain screens: smoother text
+  renderer.setPixelRatio(Math.min(2, Math.max(1.5, window.devicePixelRatio || 1)));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   host.prepend(renderer.domElement);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
 
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x223a40, 1.25));
-  const sun = new THREE.DirectionalLight(0xfff3dd, 2.1);
-  sun.position.set(-4, 12, 7);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x2a3a3c, 1.5));
+  const sun = new THREE.DirectionalLight(0xfff6e6, 1.7);
+  sun.position.set(-3, 14, 6);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(1536, 1536);
+  sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -7, right: 7, top: 7, bottom: -7, near: 1, far: 30 });
-  sun.shadow.bias = -0.0008;
+  sun.shadow.bias = -0.0006;
   scene.add(sun);
 
-  // the board: a dark wooden frame with the printed top
-  const frame = new THREE.Mesh(new THREE.BoxGeometry(WORLD + 0.5, 0.4, WORLD + 0.5), new THREE.MeshStandardMaterial({ color: COL['--table-deep'], roughness: 0.7 }));
-  frame.position.y = -0.2;
+  // wooden frame with a brass rim
+  const wood = new THREE.MeshStandardMaterial({ color: COL['--wood'], roughness: 0.6, metalness: 0.05 });
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(WORLD + 0.7, 0.36, WORLD + 0.7), [wood, wood, new THREE.MeshStandardMaterial({ color: COL['--wood-dark'], roughness: 0.8 }), wood, wood, wood]);
+  frame.position.y = -0.18;
   frame.receiveShadow = true;
   scene.add(frame);
-  const top = new THREE.Mesh(new THREE.PlaneGeometry(WORLD, WORLD), new THREE.MeshStandardMaterial({ map: texture, roughness: 0.85 }));
-  top.rotation.x = -Math.PI / 2;
-  top.position.y = 0.002;
-  top.receiveShadow = true;
-  top.name = 'top';
-  scene.add(top);
+  const brass = new THREE.MeshStandardMaterial({ color: COL['--brass'], roughness: 0.3, metalness: 0.8 });
+  const RIM = WORLD + 0.7;
+  [[0, -RIM / 2, RIM, 0.08], [0, RIM / 2, RIM, 0.08], [-RIM / 2, 0, 0.08, RIM], [RIM / 2, 0, 0.08, RIM]].forEach((b) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(b[2], 0.07, b[3]), brass);
+    m.position.set(b[0], 0.035, b[1]);
+    scene.add(m);
+  });
+
+  // the centre felt
+  const cw = (CENTRE.w / TEX) * WORLD;
+  const cgeo = new THREE.PlaneGeometry(cw, cw);
+  mapTop(cgeo, CENTRE, 0);
+  const centre = new THREE.Mesh(cgeo, new THREE.MeshStandardMaterial({ map: texture, roughness: 0.95 }));
+  centre.rotation.x = -Math.PI / 2;
+  centre.position.y = 0.002;
+  centre.receiveShadow = true;
+  scene.add(centre);
+
+  // forty raised squares; the top face shows its part of the texture
+  const topMat = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.8, emissive: COL['--paper'], emissiveMap: texture, emissiveIntensity: 0.22 });
+  SQ.forEach((sq, i) => {
+    const r = inset(cellRect(i), GAP);
+    const geo = new THREE.BoxGeometry((r.w / TEX) * WORLD, 1, (r.h / TEX) * WORLD);
+    mapTop(geo, r, 8); // vertices 8..11 are the +y face
+    const side = new THREE.MeshStandardMaterial({ color: COL['--board-edge'], roughness: 0.7 });
+    const m = new THREE.Mesh(geo, [side, side, topMat, side, side, side]);
+    const c = centreOf(r);
+    m.position.set(c.x, TILE_H / 2, c.z);
+    m.scale.y = TILE_H;
+    m.castShadow = true;
+    m.receiveShadow = true;
+    m.userData.index = i;
+    m.userData.side = side;
+    scene.add(m);
+    tiles.push(m);
+  });
+
   // a soft shadow catcher around the board so the board sits on the table
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.ShadowMaterial({ opacity: 0.25 }));
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.ShadowMaterial({ opacity: 0.28 }));
   floor.rotation.x = -Math.PI / 2;
-  floor.position.y = -0.4;
+  floor.position.y = -0.36;
   floor.receiveShadow = true;
   scene.add(floor);
+}
+
+// owned squares rise and their sides take the owner's colour
+function applyOwnership(view) {
+  tiles.forEach((m, i) => {
+    const pr = view.props[i];
+    const owner = pr && pr.owner;
+    const h = owner ? OWNED_H : TILE_H;
+    m.userData.side.color.set(owner ? playerColor(view, owner) : COL['--board-edge']);
+    if (heights[i] !== h) {
+      heights[i] = h;
+      gsap.to(m.scale, { y: h, duration: dur(0.45), ease: 'back.out(2)', onUpdate: () => { m.position.y = m.scale.y / 2; dirty = true; } });
+    }
+  });
 }
 
 // ---------- 3D pieces, one model per symbol (all original, from simple shapes) ----------
@@ -420,17 +558,16 @@ const buildings = new THREE.Group();
 scene.add(buildings);
 function houseMesh() {
   const g = new THREE.Group();
-  g.add(mesh(new THREE.BoxGeometry(0.12, 0.09, 0.12), mat(0x3daa6d, { metalness: 0.1, roughness: 0.5 }), 0, 0.045, 0));
-  const roof = mesh(new THREE.ConeGeometry(0.1, 0.07, 4), mat(0x2e7d51, { metalness: 0.1 }), 0, 0.125, 0);
+  g.add(mesh(new THREE.BoxGeometry(0.13, 0.1, 0.13), mat(COL['--g7'], { metalness: 0.1, roughness: 0.5 }), 0, 0.05, 0));
+  const roof = mesh(new THREE.ConeGeometry(0.11, 0.08, 4), mat(COL['--green'], { metalness: 0.1 }), 0, 0.14, 0);
   roof.rotation.y = Math.PI / 4;
   g.add(roof);
   return g;
 }
 function hotelMesh() {
   const g = new THREE.Group();
-  g.add(mesh(new THREE.BoxGeometry(0.3, 0.16, 0.14), mat(0xd6453d, { metalness: 0.1, roughness: 0.5 }), 0, 0.08, 0));
-  const roof = mesh(new THREE.BoxGeometry(0.32, 0.03, 0.16), mat(0x9e2e28), 0, 0.175, 0);
-  g.add(roof);
+  g.add(mesh(new THREE.BoxGeometry(0.32, 0.18, 0.15), mat(COL['--red'], { metalness: 0.1, roughness: 0.5 }), 0, 0.09, 0));
+  g.add(mesh(new THREE.BoxGeometry(0.34, 0.03, 0.17), mat(COL['--wood-dark']), 0, 0.195, 0));
   return g;
 }
 function placeBuildings(view) {
@@ -438,8 +575,9 @@ function placeBuildings(view) {
   SQ.forEach((sq, i) => {
     const pr = view.props[i];
     if (!pr || !pr.houses || !sq.group) return;
-    const band = bandRect(cellRect(i));
+    const band = bandRect(inset(cellRect(i), GAP));
     const c = centreOf(band);
+    c.y = heights[i];
     const along = band.w > band.h ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1);
     if (pr.houses === 5) {
       const m = hotelMesh();
@@ -450,11 +588,12 @@ function placeBuildings(view) {
     }
     for (let k = 0; k < pr.houses; k++) {
       const m = houseMesh();
-      const off = (k - (pr.houses - 1) / 2) * 0.17;
+      const off = (k - (pr.houses - 1) / 2) * 0.18;
       m.position.copy(c).addScaledVector(along, off);
       buildings.add(m);
     }
   });
+  dirty = true;
 }
 
 // ---------- highlight frames (current square, selected square) ----------
@@ -471,11 +610,11 @@ function fitFrame(f, i) {
   const c = centreOf(r);
   const w = (r.w / TEX) * WORLD;
   const d = (r.h / TEX) * WORLD;
-  const t = 0.06;
+  const t = 0.07;
   f.children.forEach((b) => {
-    if (b.name === 'n' || b.name === 's') { b.scale.set(w, 1, t); b.position.set(0, 0.03, (b.name === 'n' ? -1 : 1) * (d / 2 - t / 2)); } else { b.scale.set(t, 1, d); b.position.set((b.name === 'w' ? -1 : 1) * (w / 2 - t / 2), 0.03, 0); }
+    if (b.name === 'n' || b.name === 's') { b.scale.set(w, 1, t); b.position.set(0, 0.02, (b.name === 'n' ? -1 : 1) * (d / 2 - t / 2)); } else { b.scale.set(t, 1, d); b.position.set((b.name === 'w' ? -1 : 1) * (w / 2 - t / 2), 0.02, 0); }
   });
-  f.position.copy(c);
+  f.position.set(c.x, heights[i], c.z);
   f.visible = true;
 }
 const curFrame = frameMesh(COL['--brass'], 0.95);
@@ -532,12 +671,12 @@ function rollDice(values) {
 }
 
 // ---------- pieces on the board ----------
-const pieces = {}; // id -> { obj, pos, type, color, bob }
+const pieces = {}; // id -> { obj, pos, type, target, spin }
 function squareSpot(i, k, n) {
-  const r = cellRect(i);
-  const sq = SQ[i];
-  const body = bodyRect(r, !!sq.group);
+  const r = inset(cellRect(i), GAP);
+  const body = bodyRect(r, !!SQ[i].group);
   const c = centreOf(body);
+  c.y = heights[i];
   if (n <= 1) return c;
   const a = (k / n) * Math.PI * 2;
   const rad = Math.min(body.w, body.h) / TEX * WORLD * 0.28;
@@ -564,13 +703,15 @@ function syncPieces(view, tokens) {
       pc = pieces[id] = { obj: obj, pos: pos, type: type, target: spot.clone() };
     } else if (pc.pos !== pos || pc.target.distanceTo(spot) > 0.001) {
       // hop to the new place (the 2D logic already walks square by square)
+      const moved = pc.pos !== pos;
       const steps = Math.min(4, (pos - pc.pos + 40) % 40 || 1);
       const d = dur(0.28 * Math.min(steps, 2));
+      const peak = Math.max(pc.obj.position.y, spot.y) + (moved ? 0.42 : 0.05);
       gsap.killTweensOf(pc.obj.position);
       gsap.to(pc.obj.position, { x: spot.x, z: spot.z, duration: d, ease: 'power1.inOut', onUpdate: () => { dirty = true; } });
       gsap.timeline({ onUpdate: () => { dirty = true; } })
-        .to(pc.obj.position, { y: pc.pos === pos ? 0 : 0.42, duration: d / 2, ease: 'power2.out' })
-        .to(pc.obj.position, { y: 0, duration: d / 2, ease: 'bounce.out' });
+        .to(pc.obj.position, { y: peak, duration: d / 2, ease: 'power2.out' })
+        .to(pc.obj.position, { y: spot.y, duration: d / 2, ease: 'bounce.out' });
       pc.pos = pos;
       pc.target = spot.clone();
     }
@@ -592,12 +733,12 @@ function fitCamera() {
   const h = host.clientHeight || 1;
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
-  // tilted view from the near side: move back until every board corner
+  // a high view tilted toward the player: move back until every board corner
   // (and a piece standing on it) is inside the picture
-  const half = (WORLD + 0.5) / 2;
+  const half = (WORLD + 0.7) / 2;
   const pts = [];
-  [-half, half].forEach((x) => [-half, half].forEach((z) => [0, 0.9].forEach((y) => pts.push(new THREE.Vector3(x, y, z)))));
-  const dir = new THREE.Vector3(0, 0.95, 0.45).normalize();
+  [-half, half].forEach((x) => [-half, half].forEach((z) => [0, 0.7].forEach((y) => pts.push(new THREE.Vector3(x, y, z)))));
+  const dir = new THREE.Vector3(0, 1, 0.42).normalize();
   const target = new THREE.Vector3(0, 0, 0);
   let cy = 0; // vertical centre of the board in the picture
   const fits = (d) => {
@@ -607,14 +748,14 @@ function fitCamera() {
     let ok = true, y0 = 1e9, y1 = -1e9;
     pts.forEach((p) => {
       const q = p.clone().project(camera);
-      if (Math.abs(q.x) > 0.97 || Math.abs(q.y) > 0.97 || q.z >= 1) ok = false;
+      if (Math.abs(q.x) > 0.98 || Math.abs(q.y) > 0.98 || q.z >= 1) ok = false;
       y0 = Math.min(y0, q.y); y1 = Math.max(y1, q.y);
     });
     cy = (y0 + y1) / 2;
     return ok;
   };
   const fitDistance = () => {
-    let lo = 4, hi = 80;
+    let lo = 4, hi = 120;
     for (let i = 0; i < 30; i++) { const m = (lo + hi) / 2; if (fits(m)) hi = m; else lo = m; }
     fits(hi);
   };
@@ -637,14 +778,8 @@ if (supported) {
     const r = renderer.domElement.getBoundingClientRect();
     const v = new THREE.Vector2(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(v, camera);
-    const hit = ray.intersectObject(scene.getObjectByName('top'))[0];
-    if (!hit) return;
-    const px = ((hit.point.x + WORLD / 2) / WORLD) * TEX;
-    const py = ((hit.point.z + WORLD / 2) / WORLD) * TEX;
-    for (let i = 0; i < SQ.length; i++) {
-      const c = cellRect(i);
-      if (px >= c.x && px <= c.x + c.w && py >= c.y && py <= c.y + c.h) { onCell(i); return; }
-    }
+    const hit = ray.intersectObjects(tiles, false)[0];
+    if (hit) onCell(hit.object.userData.index);
   });
 }
 
@@ -668,10 +803,11 @@ function update(view, opts) {
   lastView = { view: view, opts: opts };
   onCell = opts.onCell || null;
   const tokens = opts.tokens || {};
-  // the texture only changes with ownership, mortgages and pieces' symbols
-  const sig = JSON.stringify([view.playerIds, SQ.map((s, i) => view.props[i] ? [view.props[i].owner, view.props[i].mortgaged] : 0), tokens, fontsDone]);
-  if (sig !== lastSig) { lastSig = sig; drawBoard(view, tokens); }
-  const bsig = JSON.stringify(SQ.map((s, i) => view.props[i] ? view.props[i].houses : 0));
+  const names = opts.names || {};
+  // the texture only changes with ownership, mortgages, names and symbols
+  const sig = JSON.stringify([view.playerIds, SQ.map((s, i) => view.props[i] ? [view.props[i].owner, view.props[i].mortgaged] : 0), tokens, names, fontsDone]);
+  if (sig !== lastSig) { lastSig = sig; drawBoard(view, tokens, names); applyOwnership(view); }
+  const bsig = JSON.stringify(SQ.map((s, i) => view.props[i] ? [view.props[i].houses, heights[i]] : 0));
   if (bsig !== update.bsig) { update.bsig = bsig; placeBuildings(view); }
   syncPieces(view, tokens);
   // the current player's square and the selected square

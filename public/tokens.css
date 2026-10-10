@@ -96,6 +96,9 @@
   --p6: #ff8fc0;
   --board: #f4efe3;      /* board squares (warm paper) */
   --board-line: #d8d0bd;
+  --board-edge: #c9bea5; /* sides of the raised 3D squares */
+  --wood: #6b4528;       /* 3D board frame */
+  --wood-dark: #3f2816;
 
   /* spacing scale: multiples of 4px */
   --s1: 4px;
