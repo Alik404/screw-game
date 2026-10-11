@@ -3,6 +3,8 @@
 //   Bank3D.element()           the persistent host element (canvas + overlay), reused on every render
 //   Bank3D.update(view, opts)  sync the scene with an engine view (names, tokens, focus, onCell...)
 //   Bank3D.roll([a, b])        tumble the dice and land on the server's numbers
+// The camera follows the player whose turn it is, close enough to read the squares;
+// a button, the mouse wheel or a pinch shows the whole board, and a swipe looks along it.
 import * as THREE from '/vendor/three.module.min.js';
 
 const gsap = window.gsap;
@@ -65,6 +67,11 @@ function bodyRect(r, hasBand) {
 const toWorld = (px, py) => new THREE.Vector3(-WORLD / 2 + (px / TEX) * WORLD, 0, -WORLD / 2 + (py / TEX) * WORLD);
 const centreOf = (r) => toWorld(r.x + r.w / 2, r.y + r.h / 2);
 const CENTRE = { x: 1.55 * UNIT, y: 1.55 * UNIT, w: TEX - 3.1 * UNIT, h: TEX - 3.1 * UNIT };
+// Like a real board, every square is printed to be read from outside its own side:
+// bottom row upright, left column turned a quarter, top row upside down, right column the other quarter.
+// A corner is printed like the side that starts at it.
+const SIDE_ROT = { b: 0, l: Math.PI / 2, t: Math.PI, r: -Math.PI / 2 };
+const CORNER_ROT = { 0: 0, 10: Math.PI / 2, 20: Math.PI, 30: -Math.PI / 2 };
 
 // ---------- icon images (the same drawings as the 2D board) ----------
 const ICON_COLOR = { chance: COL['--orange'], chest: COL['--blue'], tax: COL['--red'], go: COL['--green'], jail: COL['--ink'], parking: COL['--brass'], gotojail: COL['--blue'], station: COL['--ink'], utility: COL['--ink'] };
@@ -86,7 +93,7 @@ const ready = (async () => {
     }
   });
   Object.keys(U.TOKEN_PATHS).forEach((t) => jobs.push(svgImage(U.TOKEN_PATHS[t], COL['--paper']).then((img) => { images.token[t] = img; })));
-  jobs.push(document.fonts ? Promise.all([document.fonts.load('700 30px Tajawal'), document.fonts.load('150px Lalezar')]).catch(() => null) : null);
+  jobs.push(document.fonts ? Promise.all([document.fonts.load('700 30px Tajawal'), document.fonts.load('800 30px Tajawal'), document.fonts.load('150px Lalezar')]).catch(() => null) : null);
   await Promise.all(jobs);
 })();
 
@@ -126,7 +133,7 @@ function wrapWords(text, maxW) {
   if (line) lines.push(line);
   return lines;
 }
-// the biggest font (from sizes) that fits the text in maxLines lines of maxW
+// the biggest font (from sizes) that fits the text in maxLines lines of maxW and a height of maxH
 function fitName(text, maxW, sizes, maxLines, maxH) {
   for (const s of sizes) {
     ctx.font = '700 ' + s + 'px Tajawal, sans-serif';
@@ -186,23 +193,80 @@ function drawCentre() {
   ctx.lineWidth = 2;
   ctx.strokeRect(c.x + 44, c.y + 44, c.w - 88, c.h - 88);
   ctx.globalAlpha = 1;
-  // the name of the game
-  ctx.save();
-  ctx.translate(TEX / 2, TEX * 0.33);
-  ctx.direction = 'rtl';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = '230px Lalezar, Tajawal, sans-serif';
-  ctx.fillStyle = COL['--wood-dark'];
-  ctx.fillText('بنك الحظ', 8, 12);
-  ctx.fillStyle = COL['--brass'];
-  ctx.fillText('بنك الحظ', 0, 0);
-  ctx.font = '600 52px Tajawal, sans-serif';
-  ctx.fillStyle = COL['--text-dim'];
-  ctx.fillText('عقارات بغداد', 0, 165);
-  ctx.restore();
 }
 
+// The name of the game and the two card piles lie on their own clear plane over the felt.
+// It turns a quarter with the camera, so they always read the right way up.
+const DEC = Math.round(TEX * 0.75 * Math.min(1, SCALE));
+const decCanvas = document.createElement('canvas');
+decCanvas.width = decCanvas.height = DEC;
+const dctx = decCanvas.getContext('2d');
+function drawDecor() {
+  const k = DEC / CENTRE.w; // logical felt pixels -> decor canvas pixels
+  dctx.setTransform(k, 0, 0, k, 0, 0);
+  dctx.clearRect(0, 0, CENTRE.w, CENTRE.w);
+  dctx.direction = 'rtl';
+  dctx.textAlign = 'center';
+  dctx.textBaseline = 'middle';
+  const m = CENTRE.w / 2;
+  dctx.save();
+  dctx.translate(m, m);
+  dctx.rotate(-Math.PI / 4);
+  dctx.font = '250px Lalezar, Tajawal, sans-serif';
+  dctx.fillStyle = COL['--wood-dark'];
+  dctx.fillText('بنك الحظ', 8, 2);
+  dctx.fillStyle = COL['--brass'];
+  dctx.fillText('بنك الحظ', 0, -10);
+  dctx.font = '600 56px Tajawal, sans-serif';
+  dctx.fillStyle = COL['--text-dim'];
+  dctx.fillText('عقارات بغداد', 0, 150);
+  dctx.restore();
+  [['chance', 'حظ', -1], ['chest', 'صندوق', 1]].forEach(([icon, label, side]) => {
+    dctx.save();
+    dctx.translate(m + side * 370, m + side * 370);
+    dctx.rotate(-Math.PI / 4);
+    const x = -170, y = -105, w = 340, h = 210, r = 22;
+    dctx.beginPath();
+    dctx.moveTo(x + r, y);
+    dctx.arcTo(x + w, y, x + w, y + h, r);
+    dctx.arcTo(x + w, y + h, x, y + h, r);
+    dctx.arcTo(x, y + h, x, y, r);
+    dctx.arcTo(x, y, x + w, y, r);
+    dctx.closePath();
+    dctx.globalAlpha = 0.55;
+    dctx.fillStyle = COL['--table-deep'];
+    dctx.fill();
+    dctx.globalAlpha = 1;
+    dctx.setLineDash([18, 12]);
+    dctx.lineWidth = 5;
+    dctx.strokeStyle = COL['--brass'];
+    dctx.stroke();
+    dctx.setLineDash([]);
+    const img = images.square[icon];
+    if (img) dctx.drawImage(img, 55, -46, 92, 92);
+    dctx.font = '700 64px Tajawal, sans-serif';
+    dctx.fillStyle = COL['--text'];
+    dctx.fillText(label, -50, 4);
+    dctx.restore();
+  });
+  decTexture.needsUpdate = true;
+}
+
+// the owner's colour disc with their symbol
+function badge(view, tokens, owner, x, y, rad) {
+  ctx.beginPath();
+  ctx.arc(x, y, rad, 0, Math.PI * 2);
+  ctx.fillStyle = playerColor(view, owner);
+  ctx.fill();
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = COL['--paper'];
+  ctx.stroke();
+  const t = images.token[tokens[owner]];
+  if (t) ctx.drawImage(t, x - rad * 0.64, y - rad * 0.64, rad * 1.28, rad * 1.28);
+}
+
+// One square. Drawn in its own frame (turned to its side), so every square has the same
+// tall layout: colour band at the top (toward the centre), name, price, owner strip at the bottom.
 function drawSquare(view, tokens, names, sq, i) {
   const r = inset(cellRect(i), GAP);
   const pr = view.props[i];
@@ -211,90 +275,87 @@ function drawSquare(view, tokens, names, sq, i) {
   const corner = r.side === 'corner';
   ctx.fillStyle = COL['--board'];
   ctx.fillRect(r.x, r.y, r.w, r.h);
-  const band = sq.group ? bandRect(r) : null;
+  const turned = r.side === 'l' || r.side === 'r';
+  const w = turned ? r.h : r.w;
+  const hh = turned ? r.w : r.h;
+  const L = { x: -w / 2, y: -hh / 2, w: w, h: hh };
+  ctx.save();
+  ctx.translate(r.x + r.w / 2, r.y + r.h / 2);
+  ctx.rotate(corner ? CORNER_ROT[i] : SIDE_ROT[r.side]);
+  ctx.direction = 'rtl';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const band = sq.group ? { x: L.x, y: L.y, w: L.w, h: Math.round(L.h * 0.2) } : null;
   if (band) {
     ctx.fillStyle = COL['--g' + sq.group];
     ctx.fillRect(band.x, band.y, band.w, band.h);
   }
-  let body = bodyRect(r, !!band);
-  // owned: the square takes a wash of the owner's colour and a strip with the owner's name
+  let body = band ? { x: L.x, y: L.y + band.h, w: L.w, h: L.h - band.h } : { x: L.x, y: L.y, w: L.w, h: L.h };
+  // owned: a wash of the owner's colour and a strip with the owner's name along the outer edge
   if (owner) {
     ctx.save();
     ctx.globalAlpha = 0.2;
     ctx.fillStyle = oc;
     ctx.fillRect(body.x, body.y, body.w, body.h);
     ctx.restore();
-    const sh = Math.round(Math.min(body.h * 0.27, 60));
+    const sh = 56;
+    const sy = body.y + body.h - sh;
     ctx.fillStyle = oc;
-    ctx.fillRect(body.x, body.y + body.h - sh, body.w, sh);
-    ctx.direction = 'rtl';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
+    ctx.fillRect(body.x, sy, body.w, sh);
+    let tx = body.x + body.w / 2;
+    let tw = body.w - 16;
+    if (!band) { badge(view, tokens, owner, body.x + 30, sy + sh / 2, 21); tx += 24; tw = body.w - 60; }
+    const t = fitLine(names[owner] || '', tw, 36, '800');
     ctx.fillStyle = COL['--ink'];
-    const t = fitLine(names[owner] || '', body.w - 16, 34, '800');
-    ctx.fillText(t, body.x + body.w / 2, body.y + body.h - sh / 2 + 2);
+    ctx.fillText(t, tx, sy + sh / 2 + 2);
     body = { x: body.x, y: body.y, w: body.w, h: body.h - sh };
   }
   // icon, name and price (or "mortgaged"), stacked in the middle of the free space
   const ic = U.squareIcon(sq);
   const img = ic && images.square[ic];
-  const sub = pr && pr.mortgaged ? 'مرهون' : (!owner && sq.price ? String(sq.price) : '');
-  const subH = sub ? 36 : 0;
-  const gap = 6;
-  // short squares (the side columns) get a smaller icon so the name keeps its size
-  let iconS = img ? (corner ? body.w * 0.4 : Math.min(body.w, body.h) * (sq.group ? 0.3 : 0.36)) : 0;
-  if (img && !corner && body.h < 180) iconS = body.h * 0.24;
-  const room = body.h - 14 - (img ? iconS + gap : 0) - (sub ? subH + gap : 0);
-  const nm = corner ? fitName(sq.name, body.w - 24, [54, 48, 42, 36], 2, room) : fitName(sq.name, body.w - 14, [44, 40, 36, 32, 28, 24], 2, room);
+  const mort = !!(pr && pr.mortgaged);
+  const sub = mort ? 'مرهون' : (!owner && sq.price ? String(sq.price) : '');
+  const SUBH = 40;
+  const GY = 8;
+  const iconS = img ? (corner ? 104 : 66) : 0;
+  const room = body.h - 18 - (iconS ? iconS + GY : 0) - (sub ? SUBH + GY : 0);
+  const nm = corner
+    ? fitName(sq.name, body.w - 30, [62, 56, 50, 44, 38], 2, room)
+    : fitName(sq.name, body.w - 14, [52, 48, 44, 40, 36, 32, 28, 24], 2, room);
   const lineH = nm.size * 1.12;
-  const total = (img ? iconS + gap : 0) + nm.lines.length * lineH + (sub ? gap + subH : 0);
+  const total = (iconS ? iconS + GY : 0) + nm.lines.length * lineH + (sub ? GY + SUBH : 0);
   let y = body.y + (body.h - total) / 2;
   const cx = body.x + body.w / 2;
-  if (img) { ctx.drawImage(img, cx - iconS / 2, y, iconS, iconS); y += iconS + gap; }
-  ctx.direction = 'rtl';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
+  if (img) { ctx.drawImage(img, cx - iconS / 2, y, iconS, iconS); y += iconS + GY; }
   ctx.fillStyle = COL['--ink'];
   ctx.font = '700 ' + nm.size + 'px Tajawal, sans-serif';
   nm.lines.forEach((line) => { ctx.fillText(line, cx, y + lineH / 2); y += lineH; });
   if (sub) {
-    y += gap;
-    ctx.font = (pr && pr.mortgaged ? '800 ' : '700 ') + '34px Tajawal, sans-serif';
-    ctx.fillStyle = pr && pr.mortgaged ? COL['--red'] : COL['--ink'];
-    ctx.globalAlpha = pr && pr.mortgaged ? 1 : 0.72;
-    ctx.fillText(sub, cx, y + subH / 2);
+    y += GY;
+    ctx.font = (mort ? '800 ' : '700 ') + '38px Tajawal, sans-serif';
+    ctx.fillStyle = mort ? COL['--red'] : COL['--ink'];
+    ctx.globalAlpha = mort ? 1 : 0.75;
+    ctx.fillText(sub, cx, y + SUBH / 2);
     ctx.globalAlpha = 1;
   }
-  // owner badge with the owner's symbol on the colour band (top corner for stations and utilities)
-  if (owner) {
-    const bx = band ? band.x + band.w / 2 : r.x + 38;
-    const by = band ? band.y + band.h / 2 : r.y + 38;
-    const rad = band ? Math.min(band.w, band.h) * 0.46 : 30;
-    ctx.beginPath();
-    ctx.arc(bx, by, rad, 0, Math.PI * 2);
-    ctx.fillStyle = oc;
-    ctx.fill();
-    ctx.lineWidth = 5;
-    ctx.strokeStyle = COL['--paper'];
-    ctx.stroke();
-    const t = images.token[tokens[owner]];
-    if (t) ctx.drawImage(t, bx - rad * 0.64, by - rad * 0.64, rad * 1.28, rad * 1.28);
-  }
-  if (pr && pr.mortgaged) {
+  if (owner && band) badge(view, tokens, owner, band.x + band.w / 2, band.y + band.h / 2, Math.min(band.w, band.h) * 0.46);
+  if (mort) {
     ctx.save();
     ctx.beginPath();
-    ctx.rect(r.x, r.y, r.w, r.h);
+    ctx.rect(L.x, L.y, L.w, L.h);
     ctx.clip();
     ctx.strokeStyle = COL['--ink'];
     ctx.globalAlpha = 0.16;
     ctx.lineWidth = 8;
-    for (let k = -r.h; k < r.w; k += 26) { ctx.beginPath(); ctx.moveTo(r.x + k, r.y + r.h); ctx.lineTo(r.x + k + r.h, r.y); ctx.stroke(); }
+    for (let k = -L.h; k < L.w; k += 26) { ctx.beginPath(); ctx.moveTo(L.x + k, L.y + L.h); ctx.lineTo(L.x + k + L.h, L.y); ctx.stroke(); }
     ctx.restore();
   }
-  // a thin printed edge
+  // a thin printed edge (thick in the owner's colour)
+  const lw = owner ? 8 : 3;
   ctx.strokeStyle = owner ? oc : COL['--board-line'];
-  ctx.lineWidth = owner ? 8 : 3;
-  ctx.strokeRect(r.x + ctx.lineWidth / 2, r.y + ctx.lineWidth / 2, r.w - ctx.lineWidth, r.h - ctx.lineWidth);
+  ctx.lineWidth = lw;
+  ctx.strokeRect(L.x + lw / 2, L.y + lw / 2, L.w - lw, L.h - lw);
+  ctx.restore();
 }
 
 function drawBoard(view, tokens, names) {
@@ -302,6 +363,7 @@ function drawBoard(view, tokens, names) {
   ctx.clearRect(0, 0, TEX, TEX);
   drawCentre();
   SQ.forEach((sq, i) => drawSquare(view, tokens, names, sq, i));
+  drawDecor();
   texture.needsUpdate = true;
   dirty = true;
 }
@@ -318,6 +380,14 @@ const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 120);
 const texture = new THREE.CanvasTexture(canvas);
 let dirty = true;
 const tiles = []; // one raised mesh per square, index = square number
+const decTexture = new THREE.CanvasTexture(decCanvas);
+decTexture.colorSpace = THREE.SRGBColorSpace;
+const decorTurn = new THREE.Group(); // turned about the vertical axis with the camera
+const decor = new THREE.Mesh(
+  new THREE.PlaneGeometry((CENTRE.w / TEX) * WORLD, (CENTRE.w / TEX) * WORLD),
+  new THREE.MeshStandardMaterial({ map: decTexture, transparent: true, alphaTest: 0.02, roughness: 0.9, depthWrite: false }));
+decorTurn.add(decor);
+scene.add(decorTurn);
 const heights = SQ.map(() => TILE_H);
 
 // map the top face of a box (or a plane) onto a rectangle of the texture
@@ -373,6 +443,11 @@ if (supported) {
   centre.position.y = 0.002;
   centre.receiveShadow = true;
   scene.add(centre);
+
+  decor.rotation.x = -Math.PI / 2;
+  decor.position.y = 0.004;
+  decor.receiveShadow = true;
+  if (renderer) decTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
   // forty raised squares; the top face shows its part of the texture
   const topMat = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.8, emissive: COL['--paper'], emissiveMap: texture, emissiveIntensity: 0.22 });
@@ -549,7 +624,7 @@ function buildPiece(type, color) {
   const figure = (MODELS[type] || MODELS.car)(color);
   figure.position.y = 0.04;
   g.add(figure);
-  g.scale.setScalar(1.15);
+  g.scale.setScalar(1.05);
   return g;
 }
 
@@ -625,7 +700,7 @@ function pipTexture(n) {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
   const x = c.getContext('2d');
-  x.fillStyle = '#ffffff';
+  x.fillStyle = COL['--paper'];
   x.fillRect(0, 0, 128, 128);
   const P = { 1: [[64, 64]], 2: [[32, 32], [96, 96]], 3: [[32, 32], [64, 64], [96, 96]], 4: [[32, 32], [96, 32], [32, 96], [96, 96]], 5: [[32, 32], [96, 32], [64, 64], [32, 96], [96, 96]], 6: [[32, 30], [96, 30], [32, 64], [96, 64], [32, 98], [96, 98]] };
   x.fillStyle = COL['--ink'];
@@ -636,35 +711,56 @@ function pipTexture(n) {
 }
 // faces in BoxGeometry order: +x, -x, +y, -y, +z, -z
 const FACE_VALUES = [3, 4, 1, 6, 2, 5];
-// rotation (x, z) that brings each value to the top
+// rotation (x, z) that brings each value to the top; the turn about y comes last (Euler order YXZ),
+// so it never tips the top face
 const UP = { 1: [0, 0], 6: [Math.PI, 0], 2: [-Math.PI / 2, 0], 5: [Math.PI / 2, 0], 3: [0, Math.PI / 2], 4: [0, -Math.PI / 2] };
 const DIE = 0.62;
 const diceMats = FACE_VALUES.map((v) => new THREE.MeshStandardMaterial({ map: pipTexture(v), roughness: 0.35, metalness: 0.05 }));
 const dice = [0, 1].map((k) => {
   const d = mesh(new THREE.BoxGeometry(DIE, DIE, DIE), diceMats, (k ? 0.5 : -0.5), DIE / 2, 0.6);
+  d.rotation.order = 'YXZ';
   scene.add(d);
   return d;
 });
 let diceValues = [5, 3];
+let diceAt = null; // where the dice lie: { spot, right, fwd, th }
+const FELT = (CENTRE.w / TEX) * WORLD / 2 - 0.55;
+// the dice land on the felt just inside the side of the player who rolls, in front of the camera
+function diceSpot(pos) {
+  const th = azimuth(pos);
+  const fwd = forwardOf(th);
+  const spot = lookTarget(pos).addScaledVector(fwd, 1.95);
+  spot.x = Math.max(-FELT, Math.min(FELT, spot.x));
+  spot.z = Math.max(-FELT, Math.min(FELT, spot.z));
+  spot.y = DIE / 2;
+  return { spot: spot, right: rightOf(th), fwd: fwd, th: th };
+}
 function restDice(values) {
+  const at = diceAt || (diceAt = diceSpot(cam.curPos));
   dice.forEach((d, k) => {
     const u = UP[values[k]];
-    d.rotation.set(u[0], (k ? -0.25 : 0.2), u[1]);
-    d.position.set(k ? 0.5 : -0.5, DIE / 2, 0.6);
+    d.rotation.set(u[0], at.th + (k ? -0.25 : 0.2), u[1]);
+    d.position.copy(at.spot).addScaledVector(at.right, k ? 0.45 : -0.45);
   });
   diceValues = values.slice();
   dirty = true;
 }
 function rollDice(values) {
+  const at = diceAt = diceSpot(cam.curPos);
   dice.forEach((d, k) => {
     const u = UP[values[k]];
+    const end = at.spot.clone().addScaledVector(at.right, k ? 0.45 : -0.45);
+    // thrown from the player's side of the board
+    const start = end.clone().addScaledVector(at.fwd, -2.4).addScaledVector(at.right, k ? 0.9 : -0.9);
+    const yaw = at.th + (k ? -0.25 : 0.2);
+    gsap.killTweensOf(d.position);
+    gsap.killTweensOf(d.rotation);
     const tl = gsap.timeline({ onUpdate: () => { dirty = true; } });
-    const fromX = (k ? 1.6 : -1.6);
-    tl.fromTo(d.position, { x: fromX, y: 2.6, z: 3 }, { x: k ? 0.5 : -0.5, z: 0.6, duration: dur(0.95), ease: 'power2.out' }, 0);
+    tl.fromTo(d.position, { x: start.x, z: start.z }, { x: end.x, z: end.z, duration: dur(0.95), ease: 'power2.out' }, 0);
     tl.fromTo(d.position, { y: 2.6 }, { y: DIE / 2, duration: dur(0.95), ease: 'bounce.out' }, 0);
     tl.fromTo(d.rotation,
-      { x: u[0] + Math.PI * 4 + Math.random(), y: Math.random() * 6, z: u[1] + Math.PI * 4 + Math.random() },
-      { x: u[0], y: (k ? -0.25 : 0.2), z: u[1], duration: dur(1.0), ease: 'power3.out' }, 0);
+      { x: u[0] + Math.PI * 4 + Math.random(), y: yaw + Math.random() * 6, z: u[1] + Math.PI * 4 + Math.random() },
+      { x: u[0], y: yaw, z: u[1], duration: dur(1.0), ease: 'power3.out' }, 0);
     tl.delay(k * 0.08);
   });
   diceValues = values.slice();
@@ -672,11 +768,22 @@ function rollDice(values) {
 
 // ---------- pieces on the board ----------
 const pieces = {}; // id -> { obj, pos, type, target, spin }
+const INWARD = { b: new THREE.Vector3(0, 0, -1), t: new THREE.Vector3(0, 0, 1), l: new THREE.Vector3(1, 0, 0), r: new THREE.Vector3(-1, 0, 0) };
+const ALONG = { b: new THREE.Vector3(1, 0, 0), t: new THREE.Vector3(1, 0, 0), l: new THREE.Vector3(0, 0, 1), r: new THREE.Vector3(0, 0, 1) };
 function squareSpot(i, k, n) {
   const r = inset(cellRect(i), GAP);
   const body = bodyRect(r, !!SQ[i].group);
   const c = centreOf(body);
   c.y = heights[i];
+  // on a side, one or two pieces stand by the colour band (behind the name, seen from outside)
+  if (r.side !== 'corner' && n <= 2) {
+    const flat = r.side === 'b' || r.side === 't';
+    const depth = ((flat ? body.h : body.w) / TEX) * WORLD;
+    const band = SQ[i].group ? ((flat ? r.h : r.w) / TEX) * WORLD * 0.2 : 0;
+    c.addScaledVector(INWARD[r.side], band ? depth / 2 + band * 0.35 : depth * 0.3);
+    if (n === 2) c.addScaledVector(ALONG[r.side], k ? 0.22 : -0.22);
+    return c;
+  }
   if (n <= 1) return c;
   const a = (k / n) * Math.PI * 2;
   const rad = Math.min(body.w, body.h) / TEX * WORLD * 0.28;
@@ -727,60 +834,311 @@ function syncPieces(view, tokens) {
   });
 }
 
-// ---------- camera, resize, picking ----------
-function fitCamera() {
-  const w = host.clientWidth || 1;
-  const h = host.clientHeight || 1;
-  camera.aspect = w / h;
-  camera.updateProjectionMatrix();
-  // a high view tilted toward the player: move back until every board corner
-  // (and a piece standing on it) is inside the picture
+// ---------- camera ----------
+// The camera travels along the ring of squares. cam.s is a (never wrapped) square number:
+// it gives the point the camera looks at and the side it looks from (one quarter turn per side).
+// cam.zoom: 0 = close to the squares (default), 1 = the whole board, below 0 = even closer.
+const SQW = (UNIT / TEX) * WORLD; // width of a normal square in world units
+const PHI_F = (56 * Math.PI) / 180; // camera pitch close to the squares
+const PHI_O = (66 * Math.PI) / 180; // camera pitch for the whole board
+const ZMIN = -0.6;
+const UPV = new THREE.Vector3(0, 1, 0);
+const ZOOM_KEY = 'bank.zoom3d';
+function loadZoom() {
+  try {
+    const v = parseFloat(localStorage.getItem(ZOOM_KEY));
+    return isFinite(v) ? Math.min(1, Math.max(ZMIN, v)) : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+let saveTimer = null;
+function saveZoom() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try { localStorage.setItem(ZOOM_KEY, String(Math.round(cam.zoom * 100) / 100)); } catch (e) { /* no storage: the choice lasts this visit */ }
+  }, 300);
+}
+const cam = { s: 0, zoom: loadZoom(), follow: true, curId: null, curPos: 0 };
+let Df = 10; // camera distance of the close view, set from the canvas size
+
+const smooth = (x) => { const t = Math.min(1, Math.max(0, x)); return t * t * (3 - 2 * t); };
+function forwardOf(th) { return new THREE.Vector3(-Math.sin(th), 0, -Math.cos(th)); }
+function rightOf(th) { return new THREE.Vector3(Math.cos(th), 0, -Math.sin(th)); }
+// side 0 (bottom row) is seen from the front, then a quarter turn for each side.
+// The turn happens while the piece steps onto the corner, so a corner is seen like the side it starts.
+function azimuth(s) {
+  const k = Math.floor(s / 10);
+  const u = s - 10 * k;
+  return (-Math.PI / 2) * (k + (u > 9 ? smooth(u - 9) : 0));
+}
+function squareMid(i) {
+  const c = centreOf(cellRect(((i % 40) + 40) % 40));
+  c.y = 0.1;
+  return c;
+}
+function ringPoint(s) {
+  const i0 = Math.floor(s);
+  return squareMid(i0).lerp(squareMid(i0 + 1), s - i0);
+}
+// the camera aims one square ahead of the piece (where it is going), never past the next corner
+function lookTarget(s) { return ringPoint(Math.min(s + 1, (Math.floor(s / 10) + 1) * 10)); }
+
+function setPose(L, D, phi, th) {
+  camera.position.copy(L).addScaledVector(forwardOf(th), -D * Math.cos(phi)).addScaledVector(UPV, D * Math.sin(phi));
+  camera.lookAt(L);
+  camera.updateMatrixWorld();
+}
+const tmpV = new THREE.Vector3();
+// close view: the outer edge of the board sits near the bottom of the picture,
+// so the row being played is big and the felt with the dice is right above it
+function followPose(s, D) {
+  const th = azimuth(s);
+  const f = forwardOf(th);
+  const T = lookTarget(s);
+  // near a corner the camera stops at the board's edge instead of showing the empty table
+  const rt = rightOf(th);
+  const halfW = D * Math.tan((camera.fov * Math.PI) / 360) * camera.aspect * 0.92;
+  const lim = Math.max(0, WORLD / 2 + 0.35 - halfW);
+  const lat = T.dot(rt);
+  if (Math.abs(lat) > lim) T.addScaledVector(rt, Math.sign(lat) * lim - lat);
+  const E = T.clone().addScaledVector(f, -1.0);
+  E.y = 0;
+  const L = new THREE.Vector3();
+  let lo = -4, hi = 9;
+  for (let i = 0; i < 26; i++) {
+    const m = (lo + hi) / 2;
+    setPose(L.copy(T).addScaledVector(f, m), D, PHI_F, th);
+    if (tmpV.copy(E).project(camera).y > -0.86) lo = m; else hi = m;
+  }
+  return { L: L.copy(T).addScaledVector(f, hi), D: D, phi: PHI_F };
+}
+// whole board: as close as possible with every corner inside the picture, centred
+const ov = { key: '', pose: null };
+function overviewPose(th) {
+  const key = th.toFixed(4) + '|' + camera.aspect.toFixed(4);
+  if (ov.key === key) return ov.pose;
   const half = (WORLD + 0.7) / 2;
   const pts = [];
-  [-half, half].forEach((x) => [-half, half].forEach((z) => [0, 0.7].forEach((y) => pts.push(new THREE.Vector3(x, y, z)))));
-  const dir = new THREE.Vector3(0, 1, 0.42).normalize();
-  const target = new THREE.Vector3(0, 0, 0);
-  let cy = 0; // vertical centre of the board in the picture
+  [-half, half].forEach((x) => [-half, half].forEach((z) => [0, 0.6].forEach((y) => pts.push(new THREE.Vector3(x, y, z)))));
+  const f = forwardOf(th);
+  const L = new THREE.Vector3();
+  let cy = 0;
+  let D = 30;
   const fits = (d) => {
-    camera.position.copy(dir).multiplyScalar(d).add(target);
-    camera.lookAt(target);
-    camera.updateMatrixWorld();
+    setPose(L, d, PHI_O, th);
     let ok = true, y0 = 1e9, y1 = -1e9;
     pts.forEach((p) => {
-      const q = p.clone().project(camera);
-      if (Math.abs(q.x) > 0.98 || Math.abs(q.y) > 0.98 || q.z >= 1) ok = false;
-      y0 = Math.min(y0, q.y); y1 = Math.max(y1, q.y);
+      const q = tmpV.copy(p).project(camera);
+      if (Math.abs(q.x) > 0.97 || Math.abs(q.y) > 0.97 || q.z >= 1) ok = false;
+      y0 = Math.min(y0, q.y);
+      y1 = Math.max(y1, q.y);
     });
     cy = (y0 + y1) / 2;
     return ok;
   };
-  const fitDistance = () => {
-    let lo = 4, hi = 120;
-    for (let i = 0; i < 30; i++) { const m = (lo + hi) / 2; if (fits(m)) hi = m; else lo = m; }
-    fits(hi);
-  };
-  // the tilt pushes the board low: slide the look point until it is centred
   for (let k = 0; k < 6; k++) {
-    fitDistance();
+    let lo = 3, hi = 150;
+    for (let i = 0; i < 28; i++) { const m = (lo + hi) / 2; if (fits(m)) hi = m; else lo = m; }
+    D = hi;
+    fits(D);
     if (Math.abs(cy) < 0.005) break;
-    target.z -= cy * half * 0.9;
+    L.addScaledVector(f, cy * half * 0.9);
   }
-  renderer.setSize(w, h, false);
+  ov.key = key;
+  ov.pose = { L: L.clone(), D: D, phi: PHI_O };
+  return ov.pose;
+}
+
+let decorSide = null;
+function turnDecor(th) {
+  const k = Math.round(-th / (Math.PI / 2));
+  if (k === decorSide) return;
+  const first = decorSide === null;
+  decorSide = k;
+  gsap.killTweensOf(decorTurn.rotation);
+  if (first) { decorTurn.rotation.y = -k * Math.PI / 2; return; }
+  gsap.to(decorTurn.rotation, { y: -k * Math.PI / 2, duration: dur(0.7), ease: 'power2.inOut', onUpdate: () => { dirty = true; } });
+}
+
+function applyCamera() {
+  if (!supported) return;
+  const z = cam.zoom;
+  const th = azimuth(cam.s);
+  turnDecor(th);
+  if (z <= 0) {
+    const p = followPose(cam.s, Df * (1 + 0.75 * z));
+    setPose(p.L, p.D, p.phi, th);
+  } else {
+    const a = followPose(cam.s, Df);
+    const b = overviewPose(th);
+    const e = smooth(z);
+    const L = a.L.clone().lerp(b.L, e);
+    const D = Math.exp(Math.log(a.D) + (Math.log(b.D) - Math.log(a.D)) * e);
+    setPose(L, D, a.phi + (b.phi - a.phi) * e, th);
+  }
   dirty = true;
 }
-if (supported && window.ResizeObserver) new ResizeObserver(fitCamera).observe(host);
 
+// glide along the ring to a square (the short way round)
+function goTo(pos) {
+  let delta = (((pos - cam.s) % 40) + 40) % 40;
+  if (delta > 20) delta -= 40;
+  gsap.killTweensOf(cam, 's');
+  if (Math.abs(delta) < 1e-6) { applyCamera(); return; }
+  gsap.to(cam, { s: cam.s + delta, duration: dur(Math.min(1.4, 0.45 + Math.abs(delta) * 0.05)), ease: 'power2.out', onUpdate: applyCamera });
+}
+function setZoom(z) {
+  gsap.killTweensOf(cam, 'zoom');
+  cam.zoom = Math.min(1, Math.max(ZMIN, z));
+  applyCamera();
+  refreshCtrl();
+}
+function stopFollow() {
+  cam.follow = false;
+  gsap.killTweensOf(cam, 's');
+  refreshCtrl();
+}
+
+function onResize() {
+  if (!supported) return;
+  const w = host.clientWidth || 1;
+  const h = host.clientHeight || 1;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h, false);
+  // how wide a normal square is on screen: about a sixth of a phone screen,
+  // 70 to 100 CSS pixels on a computer (more of the board in view, text still large)
+  const px = w < 600 ? Math.max(60, w / 5.8) : Math.min(100, Math.max(70, w / 8));
+  Df = (h * SQW) / (2 * Math.tan((camera.fov * Math.PI) / 360) * px);
+  ov.key = '';
+  applyCamera();
+}
+if (supported && window.ResizeObserver) new ResizeObserver(onResize).observe(host);
+
+// ---------- on-board buttons ----------
+const ICONS = {
+  whole: U.ICON_PATHS.board,
+  close: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3M11 8v6M8 11h6"/>',
+  centre: '<circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>',
+};
+function ctrlButton(onClick) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'bk-3d-btn';
+  b.addEventListener('click', onClick);
+  return b;
+}
+function setIcon(b, mode, paths, label) {
+  if (b.dataset.mode === mode) return;
+  b.dataset.mode = mode;
+  b.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + '</svg>';
+  b.setAttribute('aria-label', label);
+  b.title = label;
+}
+const ctrl = document.createElement('div');
+ctrl.className = 'bk-3d-ctrl';
+const zoomBtn = ctrlButton(() => {
+  const goal = cam.zoom < 0.5 ? 1 : 0;
+  gsap.killTweensOf(cam, 'zoom');
+  gsap.to(cam, { zoom: goal, duration: dur(0.8), ease: 'power2.inOut', onUpdate: applyCamera, onComplete: saveZoom });
+  refreshCtrl(goal);
+});
+const centreBtn = ctrlButton(() => {
+  cam.follow = true;
+  goTo(cam.curPos);
+  refreshCtrl();
+});
+setIcon(centreBtn, 'centre', ICONS.centre, 'ارجع إلى الدور');
+ctrl.append(zoomBtn, centreBtn);
+const info = document.createElement('div');
+info.className = 'bk-3d-info';
+overlay.append(info);
+if (supported) host.append(ctrl);
+function refreshCtrl(goal) {
+  const z = goal === undefined ? cam.zoom : goal;
+  if (z < 0.5) setIcon(zoomBtn, 'whole', ICONS.whole, 'اللوحة كاملة');
+  else setIcon(zoomBtn, 'close', ICONS.close, 'اقترب من الدور');
+  centreBtn.hidden = cam.follow;
+}
+refreshCtrl();
+
+// ---------- touch and mouse: tap a square, swipe along the board, pinch or wheel to zoom ----------
 const ray = new THREE.Raycaster();
 let onCell = null;
+const pointers = new Map();
+let gesture = null;
+function pick(clientX, clientY) {
+  if (!onCell) return;
+  const r = renderer.domElement.getBoundingClientRect();
+  const v = new THREE.Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(v, camera);
+  const hit = ray.intersectObjects(tiles, false)[0];
+  if (hit) onCell(hit.object.userData.index);
+}
+// how many screen pixels one square takes where the camera looks (to move the board with the finger)
+function pxPerSquare() {
+  const half = rightOf(azimuth(cam.s)).multiplyScalar(SQW / 2);
+  const T = lookTarget(cam.s);
+  const a = T.clone().add(half).project(camera);
+  const b = T.clone().sub(half).project(camera);
+  return Math.max(20, (Math.abs(a.x - b.x) / 2) * (host.clientWidth || 1));
+}
+const spread = () => { const [a, b] = [...pointers.values()]; return Math.max(10, Math.hypot(a.x - b.x, a.y - b.y)); };
 if (supported) {
-  renderer.domElement.addEventListener('click', (ev) => {
-    if (!onCell) return;
-    const r = renderer.domElement.getBoundingClientRect();
-    const v = new THREE.Vector2(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
-    ray.setFromCamera(v, camera);
-    const hit = ray.intersectObjects(tiles, false)[0];
-    if (hit) onCell(hit.object.userData.index);
+  const el = renderer.domElement;
+  el.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    try { el.setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointer */ }
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, t0: performance.now() });
+    if (pointers.size === 1) gesture = { kind: 'tap', pxs: pxPerSquare(), lastX: e.clientX, lastT: performance.now(), v: 0 };
+    else if (pointers.size === 2) gesture = { kind: 'pinch', d0: spread(), z0: cam.zoom };
   });
+  el.addEventListener('pointermove', (e) => {
+    const p = pointers.get(e.pointerId);
+    if (!p || !gesture) return;
+    p.x = e.clientX;
+    p.y = e.clientY;
+    if (gesture.kind === 'pinch') {
+      if (pointers.size >= 2) setZoom(gesture.z0 + Math.log(gesture.d0 / spread()) * 1.2);
+      return;
+    }
+    if (gesture.kind === 'tap' && Math.abs(p.x - p.x0) > 8) {
+      gesture.kind = 'drag';
+      el.classList.add('dragging');
+      stopFollow();
+    }
+    if (gesture.kind === 'drag') {
+      const now = performance.now();
+      const ds = (e.clientX - gesture.lastX) / gesture.pxs;
+      cam.s += ds;
+      gesture.v = 0.7 * gesture.v + 0.3 * ((ds / Math.max(8, now - gesture.lastT)) * 1000);
+      gesture.lastX = e.clientX;
+      gesture.lastT = now;
+      applyCamera();
+    }
+  });
+  const end = (e) => {
+    const p = pointers.get(e.pointerId);
+    if (!p) return;
+    pointers.delete(e.pointerId);
+    if (gesture && gesture.kind === 'tap' && e.type === 'pointerup' && performance.now() - p.t0 < 700) pick(e.clientX, e.clientY);
+    else if (gesture && gesture.kind === 'drag' && Math.abs(gesture.v) > 0.6) {
+      // a flick keeps the board moving a little
+      gsap.to(cam, { s: cam.s + Math.max(-8, Math.min(8, gesture.v * 0.35)), duration: dur(0.8), ease: 'power3.out', onUpdate: applyCamera });
+    }
+    if (gesture && gesture.kind === 'pinch') saveZoom();
+    el.classList.remove('dragging');
+    // after a pinch the finger left behind starts nothing until it is lifted
+    gesture = pointers.size ? { kind: 'none' } : null;
+  };
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', end);
+  el.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    setZoom(cam.zoom + Math.max(-0.25, Math.min(0.25, e.deltaY * 0.0015)));
+    saveZoom();
+  }, { passive: false });
 }
 
 // render only when something changed or moves
@@ -810,14 +1168,32 @@ function update(view, opts) {
   const bsig = JSON.stringify(SQ.map((s, i) => view.props[i] ? [view.props[i].houses, heights[i]] : 0));
   if (bsig !== update.bsig) { update.bsig = bsig; placeBuildings(view); }
   syncPieces(view, tokens);
-  // the current player's square and the selected square
+  // the camera follows the player whose turn it is (and comes back to them whenever they move)
   const cur = view.currentPlayerId;
+  if (cur && view.players[cur]) {
+    const pos = view.players[cur].pos;
+    if (cam.curId === null) {
+      cam.curId = cur;
+      cam.curPos = pos;
+      cam.s = pos;
+      applyCamera();
+    } else if (cur !== cam.curId || pos !== cam.curPos) {
+      cam.curId = cur;
+      cam.curPos = pos;
+      if (!(gesture && gesture.kind === 'drag')) {
+        cam.follow = true;
+        goTo(pos);
+        refreshCtrl();
+      }
+    }
+  }
+  // the current player's square and the selected square
   if (cur && !view.players[cur].bankrupt) fitFrame(curFrame, view.players[cur].pos); else curFrame.visible = false;
   if (opts.focus !== null && opts.focus !== undefined) fitFrame(focusFrame, opts.focus); else focusFrame.visible = false;
+  if (!diceAt) restDice(view.dice || diceValues);
   if (!opts.rolling && view.dice && (view.dice[0] !== diceValues[0] || view.dice[1] !== diceValues[1])) restDice(view.dice);
-  // words over the board: last event and whose turn it is
-  overlay.replaceChildren();
-  if (opts.eventText) { const e = document.createElement('div'); e.className = 'bk-3d-event'; e.textContent = opts.eventText; overlay.append(e); }
+  // words over the board: whose turn it is and the last event
+  const parts = [];
   if (cur && opts.names) {
     const t = document.createElement('div');
     t.className = 'bk-3d-turn';
@@ -825,8 +1201,10 @@ function update(view, opts) {
     const d = document.createElement('span');
     d.className = 'dot';
     t.append(d, cur === view.you ? 'دورك' : 'دور ' + opts.names[cur]);
-    overlay.append(t);
+    parts.push(t);
   }
+  if (opts.eventText) { const e = document.createElement('div'); e.className = 'bk-3d-event'; e.textContent = opts.eventText; parts.push(e); }
+  info.replaceChildren(...parts);
   dirty = true;
 }
 
