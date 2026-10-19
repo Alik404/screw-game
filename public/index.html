@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="/tokens.css">
 <link rel="stylesheet" href="/cards.css">
 <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/domino/domino.css">
 <link rel="stylesheet" href="/portal.css">
 <script>
   // Old invite links look like /?room=ABCD: they belong to the card game.
@@ -82,6 +83,16 @@
         <a class="pt-btn primary" href="/snakes.html">العب حية ودرج</a>
       </div>
     </article>
+
+    <article class="pt-card" id="game-domino">
+      <div class="pt-art"><div class="pt-dm" id="domino-art" aria-hidden="true"></div></div>
+      <div class="pt-title"><h2>دومنو</h2><span class="pt-tag live">جديدة</span></div>
+      <p class="pt-desc">دومنو 6|6 على طاولة خضراء: طابق الأطراف، اسحب أو مرّر، وقل "دومنو!" أول واحد. سحب أو بلوك، وشراكة اثنين ضد اثنين.</p>
+      <div class="pt-meta"><span>1 – 4 لاعبين</span><span>ضد الكمبيوتر</span><span>شراكة</span></div>
+      <div class="pt-actions">
+        <a class="pt-btn primary" href="/domino.html">العب دومنو</a>
+      </div>
+    </article>
   </section>
 
   <p class="pt-foot">الغرف تعيش في ذاكرة الخادم: إذا نام الخادم تُنشئ غرفة جديدة وتكمل.</p>
@@ -90,6 +101,7 @@
 <script src="/server/config.js"></script>
 <script src="/server/deck.js"></script>
 <script src="/cards.js"></script>
+<script src="/domino/tiles.js"></script>
 <script>
   (function () {
     // screw art: back, red screw, minus one (same cards as the game)
@@ -133,6 +145,16 @@
         sq.append(rect);
       }
     }
+    // domino art: a short line of tiles on a felt, one tile standing
+    const DT = window.DominoTiles;
+    DT.ensureDefs();
+    const dm = document.getElementById('domino-art');
+    [['h', 6, 6, 't1'], ['h', 6, 3, 't2'], ['v', 3, 1, 't3'], ['v', 5, 2, 't4']].forEach(function (t) {
+      const s = document.createElement('span');
+      s.className = 'pt-dt ' + t[0] + ' ' + t[3];
+      s.innerHTML = t[0] === 'h' ? DT.tileSVGh(t[1], t[2]) : DT.tileSVG(t[1], t[2]);
+      dm.append(s);
+    });
     const one = document.querySelector('.pt-dice-1');
     const six = document.createElement('span');
     for (let k = 1; k <= 9; k++) { const b = document.createElement('b'); if ([1, 3, 4, 6, 7, 9].indexOf(k) >= 0) b.className = 'on'; six.append(b); }
@@ -146,7 +168,7 @@
     // a saved screw room? offer a way back
     try {
       // a saved seat (card game or bank game) gets the shortcut
-      const pick = [['screw', 'سكرو', '/screw.html'], ['bank', 'بنك الحظ', '/bank.html'], ['seven', 'سبعة وسبعة', '/seven.html'], ['snakes', 'حية ودرج', '/snakes.html']].map(function (g) {
+      const pick = [['screw', 'سكرو', '/screw.html'], ['bank', 'بنك الحظ', '/bank.html'], ['seven', 'سبعة وسبعة', '/seven.html'], ['snakes', 'حية ودرج', '/snakes.html'], ['domino', 'دومنو', '/domino.html']].map(function (g) {
         const s = JSON.parse(localStorage.getItem(g[0] + '.session') || 'null');
         return s && s.code ? { code: s.code, name: g[1], url: g[2] } : null;
       }).filter(Boolean)[0];

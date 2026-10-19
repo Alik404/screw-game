@@ -13,6 +13,18 @@ const SEVEN_CONFIG = require('./seven/config');
 const SEVEN = require('./seven/engine');
 const SNAKES_CONFIG = require('./snakes/config');
 const SNAKES = require('./snakes/engine');
+const DOMINO_CONFIG = require('./domino/config');
+const DOMINO = require('./domino/engine');
+
+// The clock for whoever's move it is, in games with computer players: a short pause for a computer
+// player or someone who is away, the full turn otherwise, and nothing at all when no human is connected.
+function playerClock(roster, bots, cur, key, cfg) {
+  if (roster && !roster.some(function (p) { return p.connected && !p.bot; })) return [];
+  if (bots.indexOf(cur) >= 0) return [{ kind: 'bot', key: 'bot:' + key, seconds: cfg.BOT_SECONDS }];
+  const me = roster && roster.find(function (p) { return p.id === cur; });
+  if (me && !me.connected) return [{ kind: 'away', key: 'away:' + key, seconds: cfg.AWAY_SECONDS }];
+  return [{ kind: 'turn', key: 'turn:' + key, seconds: cfg.TURN_SECONDS }];
+}
 
 const screw = {
   id: 'screw',
@@ -200,12 +212,7 @@ const snakes = {
   // get a short pause instead; with no human connected at all the game waits for someone to come back.
   timers: function (s, roster) {
     if (s.phase !== 'turn') return [];
-    const cur = s.playerIds[s.current];
-    if (roster && !roster.some(function (p) { return p.connected && !p.bot; })) return [];
-    if (s.bots.indexOf(cur) >= 0) return [{ kind: 'bot', key: 'bot:' + s.rollCount, seconds: SNAKES_CONFIG.BOT_SECONDS }];
-    const me = roster && roster.find(function (p) { return p.id === cur; });
-    if (me && !me.connected) return [{ kind: 'away', key: 'away:' + s.rollCount, seconds: SNAKES_CONFIG.AWAY_SECONDS }];
-    return [{ kind: 'turn', key: 'turn:' + s.rollCount, seconds: SNAKES_CONFIG.TURN_SECONDS }];
+    return playerClock(roster, s.bots, s.playerIds[s.current], s.rollCount, SNAKES_CONFIG);
   },
   timeout: function (s) { return SNAKES.autoPlay(s); },
   messageFor: function (ev) { return { type: 'event', event: ev }; },
@@ -218,4 +225,53 @@ const snakes = {
   },
 };
 
-module.exports = { screw: screw, bank: bank, seven: seven, snakes: snakes };
+const domino = {
+  id: 'domino',
+  minPlayers: DOMINO_CONFIG.MIN_PLAYERS,
+  maxPlayers: DOMINO_CONFIG.MAX_PLAYERS,
+  actions: ['play', 'draw'],
+  fields: ['type', 'tile', 'end'],
+  bots: true,
+  botName: DOMINO_CONFIG.BOT_NAME,
+  startOptions: function (m) {
+    const o = m && m.options && typeof m.options === 'object' ? m.options : {};
+    return { mode: o.mode, target: o.target, teams: o.teams };
+  },
+  checkOptions: function (o) { return DOMINO.readOptions(o) ? null : DOMINO.ERR.badOptions; },
+  create: function (seats, options, extra) {
+    const o = Object.assign({}, options);
+    o.bots = extra && extra.bots;
+    return DOMINO.createGame(seats, o);
+  },
+  act: function (state, seat, action) { return DOMINO.act(state, seat, action); },
+  view: function (state, seat) { return DOMINO.viewFor(state, seat); },
+  decorate: function (view, roster) {
+    view.players = view.players.map(function (vp) {
+      const rp = roster.find(function (p) { return p.id === vp.id; });
+      vp.name = rp.name;
+      vp.connected = rp.connected;
+      vp.isHost = rp.isHost;
+      return vp;
+    });
+  },
+  // a clock per move (a draw that brings a playable tile restarts it); after a hand, the next one deals itself
+  timers: function (s, roster) {
+    if (s.phase === 'turn') return playerClock(roster, s.bots, s.playerIds[s.current], s.moveCount, DOMINO_CONFIG);
+    if (s.phase === 'handOver' && (!roster || roster.some(function (p) { return p.connected && !p.bot; }))) {
+      return [{ kind: 'next', key: 'next:' + s.hand, seconds: DOMINO_CONFIG.NEXT_HAND_SECONDS }];
+    }
+    return [];
+  },
+  timeout: function (s, kind) { return kind === 'next' ? DOMINO.nextHand(s) : DOMINO.autoPlay(s); },
+  messageFor: function (ev) { return { type: 'event', event: ev }; },
+  host: {
+    next_round: function (s) { return DOMINO.nextHand(s); },
+    new_game: function (s) {
+      if (s.phase !== 'gameOver') return { error: DOMINO.ERR.wrongStage };
+      return DOMINO.createGame(s.playerIds, Object.assign({}, s.options, { bots: s.bots }));
+    },
+    end_game: function (s) { return DOMINO.endGameEarly(s); },
+  },
+};
+
+module.exports = { screw: screw, bank: bank, seven: seven, snakes: snakes, domino: domino };

@@ -133,6 +133,33 @@
       n.start(t);
       tone(c, 'sine', 700, 120, t + 0.12, 0.7, 0.2);
     },
+    // a domino tile put down on the table: a hard double click
+    clack: function (c, t) {
+      [0, 0.035].forEach(function (d, i) {
+        const n = noise(c, 0.05);
+        const f = c.createBiquadFilter();
+        f.type = 'bandpass';
+        f.frequency.value = i ? 2300 : 3400;
+        f.Q.value = 3;
+        n.connect(f);
+        env(c, f, t + d, i ? 0.35 : 0.55, 0.001, 0.045);
+        n.start(t + d);
+      });
+      tone(c, 'sine', 180, 120, t, 0.06, 0.12);
+    },
+    // knocking on the table: "I pass"
+    knock: function (c, t) {
+      [0, 0.16].forEach(function (d) {
+        tone(c, 'sine', 140, 90, t + d, 0.09, 0.35);
+        const n = noise(c, 0.04);
+        const f = c.createBiquadFilter();
+        f.type = 'lowpass';
+        f.frequency.value = 900;
+        n.connect(f);
+        env(c, f, t + d, 0.3, 0.001, 0.04);
+        n.start(t + d);
+      });
+    },
     // the winner: a short fanfare
     win: function (c, t) {
       [523, 659, 784, 1047, 784, 1047].forEach(function (f, i) {

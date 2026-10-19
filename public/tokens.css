@@ -122,6 +122,23 @@
   --sl-snake5: #d9a521;
   --sl-snake5-d: #7d5c07;
 
+  /* dominoes: ivory tiles, engraved pips, brass pins, a green felt and wine-red backs */
+  --dm-ivory: #fbf6e8;
+  --dm-ivory-2: #e9dfc6;
+  --dm-edge: #cbbd98;
+  --dm-edge-dark: #a39168;
+  --dm-pip: #1a1e29;
+  --dm-line: #b6a681;
+  --dm-brass-light: #f6dd96;
+  --dm-brass-dark: #9a6f1f;
+  --dm-felt: #12573f;
+  --dm-felt-glow: #1e7b58;
+  --dm-felt-deep: #0a3526;
+  --dm-back: #5e1a25;
+  --dm-back-2: #8c2c3b;
+  --dm-team-a: #4fa3ff;
+  --dm-team-b: #ef5b52;
+
   /* spacing scale: multiples of 4px */
   --s1: 4px;
   --s2: 8px;
