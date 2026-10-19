@@ -157,6 +157,57 @@
   --tw-die-edge: #c9ba93;
   --tw-pip: #1a1e29;
 
+  /* lagta: cream cards with a gold rim, players' colours, glows */
+  --lg-card: #fffdf7;
+  --lg-card-2: #efe6d2;
+  --lg-rim: #d9a441;
+  --lg-good: #3ddc97;
+  --lg-ice: #9fd8ff;
+  --lg-glow-a: #5b8cff;
+  --lg-glow-b: #ff8fb8;
+  --lg-p1: #ff7a6b;
+  --lg-p2: #5ab0ff;
+  --lg-p3: #4fd18b;
+  --lg-p4: #ffcf4a;
+  --lg-p5: #b98bff;
+  --lg-p6: #ff9ad0;
+  --lg-p7: #5fe0d6;
+  --lg-p8: #ffa45b;
+
+  /* minhu: skin, hair, clothes and card backgrounds for the faces */
+  --mh-skin-light: #f5d2b6;
+  --mh-skin-medium: #d8a37c;
+  --mh-skin-dark: #8e5b3c;
+  --mh-hair-black: #2b2420;
+  --mh-hair-brown: #6e4426;
+  --mh-hair-blond: #e9c46d;
+  --mh-hair-red: #c25430;
+  --mh-hair-gray: #cfd0d6;
+  --mh-eye: #2a2420;
+  --mh-lip: #b2504d;
+  --mh-blush: #ff7f7f;
+  --mh-frame: #2a2d38;
+  --mh-agal: #17171b;
+  --mh-shemagh: #c8323a;
+  --mh-c1: #3f6fd8;
+  --mh-c2: #2fa36b;
+  --mh-c3: #e0703b;
+  --mh-c4: #8b5cc7;
+  --mh-c5: #d94f7a;
+  --mh-c6: #2b9db0;
+  --mh-c7: #c99a2e;
+  --mh-c8: #4b5563;
+  --mh-bg1: #ffe3c9;
+  --mh-bg2: #d8ecff;
+  --mh-bg3: #dff5e4;
+  --mh-bg4: #f3e1ff;
+  --mh-bg5: #fff1b8;
+  --mh-bg6: #ffd9e2;
+  --mh-yes: #3ddc97;
+  --mh-no: #ff6b6b;
+  --mh-glow-a: #ffb86b;
+  --mh-glow-b: #5b8cff;
+
   /* spacing scale: multiples of 4px */
   --s1: 4px;
   --s2: 8px;

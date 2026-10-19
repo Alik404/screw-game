@@ -1,0 +1,117 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const C = require('../server/games/minhu/config');
+const E = require('../server/games/minhu/engine');
+
+const game = (opts) => E.createGame(['a', 'b'], Object.assign({ seed: 4 }, opts)).state;
+const cur = (s) => s.playerIds[s.current];
+const opp = (s, id) => (id === 'a' ? 'b' : 'a');
+
+test('the cast: 24 characters, no two answer every question the same way, every question splits them', () => {
+  assert.equal(C.CHARACTERS.length, 24);
+  const sig = C.CHARACTERS.map((c, i) => C.QUESTIONS.map((q) => (E.matches(i, q) ? 1 : 0)).join(''));
+  assert.equal(new Set(sig).size, 24, 'two characters cannot be told apart');
+  C.QUESTIONS.forEach((q) => {
+    const yes = C.CHARACTERS.filter((c, i) => E.matches(i, q)).length;
+    assert.ok(yes >= 1 && yes <= 23, q.id + ' is useless (' + yes + ')');
+  });
+  assert.equal(new Set(C.QUESTIONS.map((q) => q.id)).size, C.QUESTIONS.length);
+  // what the faces show must agree: hidden or bald hair has no colour, a beard belongs to a man, hijab to a woman
+  C.CHARACTERS.forEach((c) => {
+    assert.equal(c.color === null, c.hair === 'hidden' || c.hair === 'bald', c.name);
+    assert.equal(c.hair === 'hidden', c.hat === 'hijab' || c.hat === 'shemagh', c.name);
+    if (c.beard || c.mustache || c.hat === 'shemagh') assert.equal(c.g, 'm', c.name);
+    if (c.hat === 'hijab') assert.equal(c.g, 'f', c.name);
+  });
+});
+
+test('a round: different secrets, ask (answered from the secret), flip, end the turn', () => {
+  let s = game();
+  assert.notEqual(s.secrets.a, s.secrets.b);
+  const p = cur(s);
+  const q = C.QUESTIONS[0];
+  assert.equal(E.act(s, opp(s, p), { type: 'ask', q: q.id }).error, E.ERR.notYourTurn);
+  assert.equal(E.act(s, p, { type: 'ask', q: 'tall' }).error, E.ERR.badQuestion);
+  assert.equal(E.act(s, p, { type: 'end_turn' }).error, E.ERR.wrongStage);
+  let r = E.act(s, p, { type: 'ask', q: q.id });
+  assert.equal(r.events[0].yes, E.matches(s.secrets[opp(s, p)], q));
+  s = r.state;
+  assert.equal(s.stage, 'flip');
+  assert.equal(E.act(s, p, { type: 'ask', q: 'old' }).error, E.ERR.wrongStage);
+  s = E.act(s, p, { type: 'flip', ids: [3, 1, 3, 2] }).state;
+  assert.deepEqual(s.down[p], [1, 2, 3]);
+  assert.equal(E.act(s, p, { type: 'flip', ids: [99] }).error, E.ERR.badChar);
+  assert.equal(E.act(s, p, { type: 'flip', ids: 'all' }).error, E.ERR.badAction);
+  s = E.act(s, p, { type: 'end_turn' }).state;
+  assert.equal(cur(s), opp(s, p));
+  // asking the same question twice is refused (for the same asker)
+  s = E.act(E.act(s, cur(s), { type: 'ask', q: 'old' }).state, cur(s), { type: 'end_turn' }).state;
+  assert.equal(E.act(s, p, { type: 'ask', q: q.id }).error, E.ERR.asked);
+});
+
+test('guessing: right wins the round, wrong loses it; the match ends at the target', () => {
+  let s = game({ target: 2 });
+  let p = cur(s);
+  let r = E.act(s, p, { type: 'guess', char: s.secrets[opp(s, p)] });
+  assert.equal(r.events[0].right, true);
+  assert.equal(r.state.scores[p], 1);
+  assert.equal(r.state.phase, 'roundOver');
+  assert.equal(E.viewFor(r.state, opp(s, p)).oppSecret, s.secrets[p]);
+  s = E.nextRound(r.state).state;
+  assert.equal(s.round, 2);
+  assert.equal(cur(s), opp(s, p), 'the other player starts the next round');
+  p = cur(s);
+  const wrong = [0, 1, 2].find((i) => i !== s.secrets[opp(s, p)]);
+  r = E.act(s, p, { type: 'guess', char: wrong });
+  assert.equal(r.events[0].right, false);
+  assert.equal(r.state.scores[opp(s, p)], 2);
+  assert.equal(r.state.phase, 'matchOver');
+  assert.equal(E.act(r.state, p, { type: 'ask', q: 'male' }).error, E.ERR.gameOver);
+});
+
+test('nobody gets the same character twice in a match', () => {
+  for (let seed = 1; seed <= 30; seed++) {
+    let s = E.createGame(['a', 'b'], { seed, target: 3 }).state;
+    const seen = { a: [s.secrets.a], b: [s.secrets.b] };
+    while (s.phase !== 'matchOver') {
+      const p = cur(s);
+      s = E.act(s, p, { type: 'guess', char: s.secrets[opp(s, p)] }).state;
+      if (s.phase === 'roundOver') {
+        s = E.nextRound(s).state;
+        ['a', 'b'].forEach((id) => { assert.ok(!seen[id].includes(s.secrets[id]), 'repeat for ' + id); seen[id].push(s.secrets[id]); });
+        assert.notEqual(s.secrets.a, s.secrets.b);
+      }
+    }
+  }
+});
+
+test('secrecy: my view never holds the other secret during a round', () => {
+  const s = game();
+  ['a', 'b'].forEach((id) => {
+    const v = E.viewFor(s, id);
+    assert.equal(v.secret, s.secrets[id]);
+    assert.equal(v.oppSecret, null);
+    assert.ok(!JSON.stringify(v).includes('secrets'));
+  });
+});
+
+test('a person whose clock runs out just loses the turn', () => {
+  const s = game();
+  const r = E.autoPlay(s);
+  assert.equal(r.events[0].type, 'timeout');
+  assert.equal(cur(r.state), opp(s, cur(s)));
+});
+
+test('the smart computer finds any character in a handful of questions; the easy one gets there too', () => {
+  ['smart', 'easy'].forEach((level) => {
+    let total = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      let s = E.createGame(['x', 'y'], { seed, level, bots: ['x', 'y'], target: 1 }).state;
+      let n = 0;
+      while (s.phase === 'turn') { s = E.autoPlay(s).state; n += 1; assert.ok(n < 200); }
+      total += s.result.questions;
+      if (level === 'smart') assert.equal(s.result.reason, 'right', 'the smart computer never guesses wrong');
+    }
+    if (level === 'smart') assert.ok(total / 40 <= 12, 'average questions per round ' + total / 40);
+  });
+});

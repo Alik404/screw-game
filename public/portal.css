@@ -110,3 +110,20 @@ body.portal { min-height: 100dvh; }
 .pt-tw .ck.w { fill: var(--tw-white); stroke: var(--tw-white-rim); stroke-width: 2; }
 .pt-tw .ck.b { fill: var(--tw-black); stroke: var(--tw-black-rim); stroke-width: 2; }
 .pt-tw .dz { fill: var(--tw-die); stroke: var(--tw-die-edge); stroke-width: 1.5; }
+
+/* lagta art: two round cards */
+.pt-lg { position: relative; width: 210px; height: 130px; }
+.pt-lgc { position: absolute; width: 112px; height: 112px; border-radius: 50%; top: 8px; background: radial-gradient(circle at 34% 28%, var(--lg-card), var(--lg-card-2) 78%); box-shadow: 0 0 0 3px var(--lg-rim), 0 12px 22px color-mix(in srgb, var(--ink) 55%, transparent); }
+.pt-lgc.a { left: 6px; transform: rotate(-8deg); }
+.pt-lgc.b { left: 92px; top: 14px; transform: rotate(10deg); }
+.pt-lgc span { position: absolute; font-size: 24px; line-height: 1; transform: translate(-50%, -50%); }
+.pt-lgc .p0 { left: 50%; top: 50%; } .pt-lgc .p1 { left: 50%; top: 20%; } .pt-lgc .p2 { left: 79%; top: 46%; } .pt-lgc .p3 { left: 64%; top: 80%; } .pt-lgc .p4 { left: 24%; top: 62%; }
+.pt-lgc.b .p0 { left: 30%; top: 32%; }
+.pt-lgc .hit { border-radius: 50%; box-shadow: 0 0 0 3px var(--lg-good); background: color-mix(in srgb, var(--lg-good) 30%, transparent); padding: 3px; }
+
+/* minhu art: three face cards */
+.pt-mh { position: relative; width: 210px; height: 130px; }
+.pt-mh .mh-card { position: absolute; width: 74px; top: 12px; cursor: default; }
+.pt-mh .mh-card:nth-child(1) { left: 14px; transform: rotate(-10deg); }
+.pt-mh .mh-card:nth-child(2) { left: 68px; top: 4px; z-index: 1; }
+.pt-mh .mh-card:nth-child(3) { left: 122px; transform: rotate(10deg); }

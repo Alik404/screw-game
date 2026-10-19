@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="/cards.css">
 <link rel="stylesheet" href="/style.css">
 <link rel="stylesheet" href="/domino/domino.css">
+<link rel="stylesheet" href="/minhu/minhu.css">
 <link rel="stylesheet" href="/portal.css">
 <script>
   // Old invite links look like /?room=ABCD: they belong to the card game.
@@ -103,6 +104,22 @@
         <a class="pt-btn primary" href="/tawla.html">العب طاولي</a>
       </div>
     </article>
+
+    <article class="pt-card" id="game-lagta">
+      <div class="pt-art"><div class="pt-lg" id="lagta-art" aria-hidden="true"></div></div>
+      <div class="pt-title"><h2>لقطة!</h2><span class="pt-tag live">جديدة</span></div>
+      <p class="pt-desc">كل كرتين بينهم رمز واحد مشترك. أول من يلقطه بين كرته وكرت الوسط ياخذ الكرت. لعبة سرعة وعيون للعيلة كلها.</p>
+      <div class="pt-meta"><span>2 – 8 لاعبين</span><span>ضد الكمبيوتر</span><span>سريعة</span></div>
+      <div class="pt-actions"><a class="pt-btn primary" href="/lagta.html">العب لقطة!</a></div>
+    </article>
+
+    <article class="pt-card" id="game-minhu">
+      <div class="pt-art"><div class="pt-mh" id="minhu-art" aria-hidden="true"></div></div>
+      <div class="pt-title"><h2>منو هو؟</h2><span class="pt-tag live">جديدة</span></div>
+      <p class="pt-desc">عندك شخصية سرية وخصمك عنده وحدة. اسأل "لابس نظارات؟"، اقلب الوجوه المستبعدة، وخمّن قبله. 24 شخصية مرسومة.</p>
+      <div class="pt-meta"><span>لاعبان</span><span>ضد الكمبيوتر</span><span>أسئلة وتخمين</span></div>
+      <div class="pt-actions"><a class="pt-btn primary" href="/minhu.html">العب منو هو؟</a></div>
+    </article>
   </section>
 
   <p class="pt-foot">الغرف تعيش في ذاكرة الخادم: إذا نام الخادم تُنشئ غرفة جديدة وتكمل.</p>
@@ -112,6 +129,9 @@
 <script src="/server/deck.js"></script>
 <script src="/cards.js"></script>
 <script src="/domino/tiles.js"></script>
+<script src="/server/games/lagta/config.js"></script>
+<script src="/server/games/minhu/config.js"></script>
+<script src="/minhu/faces.js"></script>
 <script>
   (function () {
     // screw art: back, red screw, minus one (same cards as the game)
@@ -187,6 +207,34 @@
         add('rect', { x: d[0], y: d[1], width: 18, height: 18, rx: 4, class: 'dz', transform: 'rotate(' + d[3] + ' ' + (d[0] + 9) + ' ' + (d[1] + 9) + ')' });
       });
     })();
+    // lagta art: two round cards with a few symbols each (the shared one glows)
+    (function () {
+      const box = document.getElementById('lagta-art');
+      const S = window.LagtaConfig.SYMBOLS;
+      [[[8, 12, 23, 45, 32], 'a'], [[8, 16, 40, 54, 26], 'b']].forEach(function (c) {
+        const card = document.createElement('div');
+        card.className = 'pt-lgc ' + c[1];
+        c[0].forEach(function (s, i) {
+          const e = document.createElement('span');
+          e.className = 'p' + i + (s === 8 ? ' hit' : '');
+          e.textContent = S[s];
+          card.append(e);
+        });
+        box.append(card);
+      });
+    })();
+    // minhu art: three faces, one turned down
+    (function () {
+      const F = window.MinhuFaces;
+      F.ensureDefs();
+      const box = document.getElementById('minhu-art');
+      [[5, ''], [13, ''], [20, ' down']].forEach(function (c) {
+        const d = document.createElement('div');
+        d.className = 'mh-card bg-' + window.MinhuConfig.CHARACTERS[c[0]].bg + c[1];
+        d.innerHTML = '<div class="inner"><div class="front"><div class="pic">' + F.face(c[0]) + '</div></div><div class="back">؟</div></div>';
+        box.append(d);
+      });
+    })();
     const one = document.querySelector('.pt-dice-1');
     const six = document.createElement('span');
     for (let k = 1; k <= 9; k++) { const b = document.createElement('b'); if ([1, 3, 4, 6, 7, 9].indexOf(k) >= 0) b.className = 'on'; six.append(b); }
@@ -200,7 +248,7 @@
     // a saved screw room? offer a way back
     try {
       // a saved seat (card game or bank game) gets the shortcut
-      const pick = [['screw', 'سكرو', '/screw.html'], ['bank', 'بنك الحظ', '/bank.html'], ['seven', 'سبعة وسبعة', '/seven.html'], ['snakes', 'حية ودرج', '/snakes.html'], ['domino', 'دومنو', '/domino.html'], ['tawla', 'طاولي', '/tawla.html']].map(function (g) {
+      const pick = [['screw', 'سكرو', '/screw.html'], ['bank', 'بنك الحظ', '/bank.html'], ['seven', 'سبعة وسبعة', '/seven.html'], ['snakes', 'حية ودرج', '/snakes.html'], ['domino', 'دومنو', '/domino.html'], ['tawla', 'طاولي', '/tawla.html'], ['lagta', 'لقطة!', '/lagta.html'], ['minhu', 'منو هو؟', '/minhu.html']].map(function (g) {
         const s = JSON.parse(localStorage.getItem(g[0] + '.session') || 'null');
         return s && s.code ? { code: s.code, name: g[1], url: g[2] } : null;
       }).filter(Boolean)[0];

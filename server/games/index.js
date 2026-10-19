@@ -17,6 +17,10 @@ const DOMINO_CONFIG = require('./domino/config');
 const DOMINO = require('./domino/engine');
 const TAWLA_CONFIG = require('./tawla/config');
 const TAWLA = require('./tawla/engine');
+const LAGTA_CONFIG = require('./lagta/config');
+const LAGTA = require('./lagta/engine');
+const MINHU_CONFIG = require('./minhu/config');
+const MINHU = require('./minhu/engine');
 
 // The clock for whoever's move it is, in games with computer players: a short pause for a computer
 // player or someone who is away, the full turn otherwise, and nothing at all when no human is connected.
@@ -329,4 +333,108 @@ const tawla = {
   },
 };
 
-module.exports = { screw: screw, bank: bank, seven: seven, snakes: snakes, domino: domino, tawla: tawla };
+const lagta = {
+  id: 'lagta',
+  minPlayers: LAGTA_CONFIG.MIN_PLAYERS,
+  maxPlayers: LAGTA_CONFIG.MAX_PLAYERS,
+  actions: ['claim'],
+  fields: ['type', 'symbol'],
+  bots: true,
+  botName: LAGTA_CONFIG.BOT_NAME,
+  startOptions: function (m) {
+    const o = m && m.options && typeof m.options === 'object' ? m.options : {};
+    return { size: o.size, level: o.level };
+  },
+  checkOptions: function (o) { return LAGTA.readOptions(o) ? null : LAGTA.ERR.badOptions; },
+  create: function (seats, options, extra) {
+    const o = Object.assign({}, options);
+    o.bots = extra && extra.bots;
+    return LAGTA.createGame(seats, o);
+  },
+  // a race: the server's clock stamps each claim (a wrong one freezes the player for a moment)
+  act: function (state, seat, action) { action.at = Date.now(); return LAGTA.act(state, seat, action); },
+  view: function (state, seat) { return LAGTA.viewFor(state, seat); },
+  decorate: function (view, roster) {
+    view.players = view.players.map(function (vp) {
+      const rp = roster.find(function (p) { return p.id === vp.id; });
+      vp.name = rp.name;
+      vp.connected = rp.connected;
+      vp.isHost = rp.isHost;
+      return vp;
+    });
+  },
+  // the countdown, the pause after a win, one clock per computer player, and a safety for a card nobody finds
+  timers: function (s, roster) {
+    if (roster && !roster.some(function (p) { return p.connected && !p.bot; })) return [];
+    if (s.phase === 'countdown') return [{ kind: 'next', key: 'go', seconds: LAGTA_CONFIG.COUNTDOWN_SECONDS }];
+    if (s.phase === 'between') return [{ kind: 'next', key: 'b' + s.seq, seconds: LAGTA_CONFIG.BETWEEN_SECONDS }];
+    if (s.phase !== 'play') return [];
+    const list = s.bots.map(function (id) { return { kind: 'bot:' + id, key: 'p' + s.seq, seconds: s.botDelay[id] }; });
+    list.push({ kind: 'stuck', key: 's' + s.seq, seconds: LAGTA_CONFIG.STUCK_SECONDS });
+    return list;
+  },
+  timeout: function (s, kind) {
+    if (kind === 'next') return LAGTA.next(s);
+    if (kind === 'stuck') return LAGTA.skip(s);
+    return LAGTA.botClaim(s, kind.slice(4));
+  },
+  messageFor: function (ev) { return { type: 'event', event: ev }; },
+  host: {
+    new_game: function (s) {
+      if (s.phase !== 'gameOver') return { error: LAGTA.ERR.wrongStage };
+      return LAGTA.createGame(s.playerIds, Object.assign({}, s.options, { bots: s.bots }));
+    },
+    end_game: function (s) { return LAGTA.endGameEarly(s); },
+  },
+};
+
+const minhu = {
+  id: 'minhu',
+  minPlayers: MINHU_CONFIG.MIN_PLAYERS,
+  maxPlayers: MINHU_CONFIG.MAX_PLAYERS,
+  actions: ['ask', 'flip', 'end_turn', 'guess'],
+  fields: ['type', 'q', 'ids', 'char'],
+  bots: true,
+  botName: MINHU_CONFIG.BOT_NAME,
+  startOptions: function (m) {
+    const o = m && m.options && typeof m.options === 'object' ? m.options : {};
+    return { target: o.target, level: o.level };
+  },
+  checkOptions: function (o) { return MINHU.readOptions(o) ? null : MINHU.ERR.badOptions; },
+  create: function (seats, options, extra) {
+    const o = Object.assign({}, options);
+    o.bots = extra && extra.bots;
+    return MINHU.createGame(seats, o);
+  },
+  act: function (state, seat, action) { return MINHU.act(state, seat, action); },
+  view: function (state, seat) { return MINHU.viewFor(state, seat); },
+  decorate: function (view, roster) {
+    view.players = view.players.map(function (vp) {
+      const rp = roster.find(function (p) { return p.id === vp.id; });
+      vp.name = rp.name;
+      vp.connected = rp.connected;
+      vp.isHost = rp.isHost;
+      return vp;
+    });
+  },
+  // one clock per turn (asking, then flipping, share it); the next round deals itself
+  timers: function (s, roster) {
+    if (s.phase === 'turn') return playerClock(roster, s.bots, s.playerIds[s.current], s.round + ':' + s.turnCount + (s.bots.indexOf(s.playerIds[s.current]) >= 0 ? s.stage : ''), MINHU_CONFIG);
+    if (s.phase === 'roundOver' && (!roster || roster.some(function (p) { return p.connected && !p.bot; }))) {
+      return [{ kind: 'next', key: 'next:' + s.round, seconds: MINHU_CONFIG.NEXT_ROUND_SECONDS }];
+    }
+    return [];
+  },
+  timeout: function (s, kind) { return kind === 'next' ? MINHU.nextRound(s) : MINHU.autoPlay(s); },
+  messageFor: function (ev) { return { type: 'event', event: ev }; },
+  host: {
+    next_round: function (s) { return MINHU.nextRound(s); },
+    new_game: function (s) {
+      if (s.phase !== 'matchOver') return { error: MINHU.ERR.wrongStage };
+      return MINHU.createGame(s.playerIds, Object.assign({}, s.options, { bots: s.bots }));
+    },
+    end_game: function (s) { return MINHU.endGameEarly(s); },
+  },
+};
+
+module.exports = { screw: screw, bank: bank, seven: seven, snakes: snakes, domino: domino, tawla: tawla, lagta: lagta, minhu: minhu };

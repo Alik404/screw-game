@@ -28,6 +28,10 @@ const SHARED = {
   '/server/games/domino/engine.js': path.join(__dirname, 'games', 'domino', 'engine.js'),
   '/server/games/tawla/config.js': path.join(__dirname, 'games', 'tawla', 'config.js'),
   '/server/games/tawla/engine.js': path.join(__dirname, 'games', 'tawla', 'engine.js'),
+  '/server/games/lagta/config.js': path.join(__dirname, 'games', 'lagta', 'config.js'),
+  '/server/games/lagta/engine.js': path.join(__dirname, 'games', 'lagta', 'engine.js'),
+  '/server/games/minhu/config.js': path.join(__dirname, 'games', 'minhu', 'config.js'),
+  '/server/games/minhu/engine.js': path.join(__dirname, 'games', 'minhu', 'engine.js'),
 };
 
 const TYPES = {
