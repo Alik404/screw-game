@@ -79,6 +79,9 @@
     status: 'connecting', name: store('screw.name') || '', codeInput: urlCode, session: store(GAME + '.session'), autoJoining: false,
     you: null, room: null, game: null, names: {}, opts: savedOptions(), optsSent: null, sheet: null, toast: null, homeError: '',
     bootId: null, serverRestarted: false, lost: null, disconnectedAt: null, reacts: false, timerEnd: null, nextEnd: null,
+    elec: store(GAME + '.elec') !== false, // the electronic edition (the default look)
+    voice: store(GAME + '.voice') !== false, // it reads questions and answers aloud
+    lcd: null, // {q, a, cls, until}: what the screen flashes for a moment
     down: null, // my board (optimistic; the server keeps the truth)
     flipTimer: null, guessMode: false, guessPick: null, sent: false, resultAt: 0, hideResult: false,
   };
@@ -146,7 +149,7 @@
     if (!S.flipTimer || !prev || prev.round !== m.round) S.down = m.down.slice();
     if (!prev || prev.round !== m.round) { S.guessMode = false; S.hideResult = false; }
     if (m.phase !== 'turn' || m.currentPlayerId !== m.you || m.stage !== 'ask') S.guessMode = false;
-    if (m.phase === 'turn' && m.currentPlayerId === m.you && (!prev || prev.currentPlayerId !== m.you || prev.round !== m.round)) { SND.play('turn', 300); buzz(50); }
+    if (m.phase === 'turn' && m.currentPlayerId === m.you && (!prev || prev.currentPlayerId !== m.you || prev.round !== m.round)) { sfx('turn', 300); buzz(50); }
   }
 
   function nm(id) { return S.names[id] || '؟'; }
@@ -164,7 +167,37 @@
     document.body.append(el);
     setTimeout(function () { el.remove(); }, 2300);
   }
+  // ---------- the electronic edition: beeps, a voice, the screen ----------
+  const BEEPS = { turn: 'e-beep', deal: 'e-boot', ladder: 'e-yes', knock: 'e-no', flip: 'e-tick', win: 'e-jingle', screw: 'e-no' };
+  function sfx(name, delay) { SND.play(S.elec && BEEPS[name] ? BEEPS[name] : name, delay); }
+
+  let arVoice = null;
+  function pickVoice() {
+    try { arVoice = window.speechSynthesis.getVoices().find(function (v) { return /^ar/i.test(v.lang); }) || null; } catch (e) { arVoice = null; }
+  }
+  if ('speechSynthesis' in window) { pickVoice(); window.speechSynthesis.onvoiceschanged = pickVoice; }
+  // only with an Arabic voice: an English voice reading Arabic is worse than silence
+  function speak(text) {
+    if (!S.elec || !S.voice || !arVoice || SND.isMuted()) return;
+    try {
+      window.speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.voice = arVoice;
+      u.lang = arVoice.lang;
+      u.rate = 1.05;
+      u.pitch = 0.85;
+      window.speechSynthesis.speak(u);
+    } catch (e) { /* no voice */ }
+  }
+
   function announce(q, a, cls, sub) {
+    if (S.elec) {
+      // the electronic edition shows it on its screen instead of across the page
+      S.lcd = { q: q, a: a, cls: cls || '', until: Date.now() + 2800 };
+      setTimeout(render, 2850);
+      render();
+      return;
+    }
     const el = h('div', { class: 'mh-announce ' + (cls || ''), role: 'status' }, h('div', { class: 'q' }, q), h('div', { class: 'a' }, a), sub ? h('div', { class: 's' }, sub) : null);
     document.body.append(el);
     setTimeout(function () { el.classList.add('out'); }, 1500);
@@ -181,21 +214,28 @@
   function onEvent(e) {
     switch (e.type) {
       case 'round_start':
-        SND.play('deal');
+        sfx('deal');
         announce('الجولة ' + e.round, isMe(e.firstPlayerId) ? 'أنت تبدأ' : 'يبدأ ' + nm(e.firstPlayerId), 'start');
+        speak('الجولة ' + e.round + '. ' + (isMe(e.firstPlayerId) ? 'أنت تبدأ' : 'يبدأ ' + nm(e.firstPlayerId)));
         break;
       case 'ask': {
         const q = question(e.q);
-        if (isMe(e.playerId)) { announce(q.text, e.yes ? 'نعم ✓' : 'لا ✗', e.yes ? 'yes' : 'no'); SND.play(e.yes ? 'ladder' : 'knock'); } else {
+        if (isMe(e.playerId)) {
+          announce(q.text, e.yes ? 'نعم ✓' : 'لا ✗', e.yes ? 'yes' : 'no');
+          sfx(e.yes ? 'ladder' : 'knock');
+          speak(q.text + ' ' + (e.yes ? 'نعم' : 'لا'));
+        } else {
           announce(nm(e.playerId) + ' يسأل: ' + q.text, e.yes ? 'نعم' : 'لا', 'theirs', 'عن شخصيتك، والخادم جاوب');
-          SND.play('flip');
+          sfx('flip');
+          speak(nm(e.playerId) + ' يسأل: ' + q.text + ' الجواب: ' + (e.yes ? 'نعم' : 'لا'));
         }
         break;
       }
       case 'guess': {
         const c = C.CHARACTERS[e.char];
         announce((isMe(e.playerId) ? 'خمّنت: ' : nm(e.playerId) + ' خمّن: ') + c.name, e.right ? 'صح! 🎯' : 'غلط!', e.right ? 'yes' : 'no');
-        SND.play(e.right ? 'win' : 'screw');
+        sfx(e.right ? 'win' : 'screw');
+        speak((isMe(e.playerId) ? 'خمّنت ' : nm(e.playerId) + ' خمّن ') + c.name + '. ' + (e.right ? 'صح!' : 'غلط!'));
         break;
       }
       case 'round_end':
@@ -204,7 +244,7 @@
         if (isMe(e.result.winnerId)) buzz([40, 60, 40]);
         break;
       case 'match_over':
-        setTimeout(function () { if (e.winnerIds.indexOf(S.you) >= 0) { confetti(); SND.play('win'); } }, 2000);
+        setTimeout(function () { if (e.winnerIds.indexOf(S.you) >= 0) { confetti(); sfx('win'); } }, 2000);
         break;
       case 'timeout':
         if (isMe(e.playerId)) toast('خلص وقتك، راح الدور.'); else toast('خلص وقت ' + nm(e.playerId) + '.', true);
@@ -227,7 +267,7 @@
     const d = S.down.slice();
     const k = d.indexOf(i);
     if (k >= 0) d.splice(k, 1); else d.push(i);
-    SND.play('flip');
+    sfx('flip');
     setDown(d);
   }
   // every face my answers rule out, turned down
@@ -239,7 +279,7 @@
       if (d.indexOf(i) >= 0) continue;
       if (!mine.every(function (a) { return matches(i, question(a.q)) === a.yes; })) d.push(i);
     }
-    SND.play('deal');
+    sfx('deal');
     setDown(d);
   }
 
@@ -358,21 +398,70 @@
       return h('div', { class: 'mh-panel' },
         h('div', { class: 'mh-qa' }, h('span', null, question(la.q).text), h('b', { class: la.yes ? 'yes' : 'no' }, la.yes ? 'نعم ✓' : 'لا ✗')),
         h('div', { class: 'btns' },
-          h('button', { class: 'with-icon', onclick: autoFlip }, icon('flipall', 20), 'اقلب المستبعدين'),
-          h('button', { class: 'primary with-icon', onclick: function () { if (send({ type: 'end_turn' })) S.sent = true; } }, icon('next', 20), 'إنهاء الدور')));
+          h('button', { class: 'with-icon arc-flip', onclick: autoFlip }, icon('flipall', 20), S.elec ? 'اقلب' : 'اقلب المستبعدين'),
+          h('button', { class: 'primary with-icon arc-done', onclick: function () { if (send({ type: 'end_turn' })) S.sent = true; } }, icon('next', 20), S.elec ? 'تم' : 'إنهاء الدور')));
     }
     if (S.guessMode) {
       return h('div', { class: 'mh-panel' }, h('div', { class: 'mh-instr' }, 'اضغط على الشخصية اللي تظنها هي'),
-        h('div', { class: 'btns' }, h('button', { onclick: function () { S.guessMode = false; render(); } }, 'إلغاء التخمين')));
+        h('div', { class: 'btns' }, h('button', { class: 'arc-cancel', onclick: function () { S.guessMode = false; render(); } }, 'إلغاء التخمين')));
     }
     return h('div', { class: 'mh-panel' },
       h('div', { class: 'mh-instr' }, 'دورك: اسأل سؤال أو خمّن'),
       h('div', { class: 'btns' },
-        h('button', { class: 'primary big with-icon', onclick: function () { S.sheet = 'ask'; render(); } }, icon('ask', 22), 'اسأل'),
-        h('button', { class: 'big with-icon mh-guessbtn', onclick: function () { S.guessMode = true; render(); } }, icon('target', 22), 'خمّن')));
+        h('button', { class: 'primary big with-icon arc-ask', onclick: function () { S.sheet = 'ask'; render(); } }, icon('ask', 22), 'اسأل'),
+        h('button', { class: 'big with-icon mh-guessbtn arc-guess', onclick: function () { S.guessMode = true; render(); } }, icon('target', 22), 'خمّن')));
+  }
+
+  // what the screen says when it is not flashing an answer
+  function lcdStatus(v) {
+    const opp = other(v);
+    if (v.phase !== 'turn') return 'انتهت الجولة';
+    if (v.currentPlayerId === v.you) {
+      if (v.stage === 'flip') { const la = lastAnswer(v, v.you); return question(la.q).text + ' ← ' + (la.yes ? 'نعم' : 'لا') + ' · اقلب وتم'; }
+      return S.guessMode ? 'اختار الوجه اللي تظنه' : 'دورك: اسأل أو خمّن';
+    }
+    if (v.stage === 'flip') { const la = lastAnswer(v, opp); if (la) return nm(opp) + ' سأل: ' + question(la.q).text + ' ← ' + (la.yes ? 'نعم' : 'لا'); }
+    return 'دور ' + nm(opp) + '…';
+  }
+
+  function elecScreen() {
+    const v = S.game;
+    const now = Date.now();
+    const left = secondsOf(S.timerEnd);
+    const myTurn = v.phase === 'turn' && v.currentPlayerId === v.you;
+    const opp = other(v);
+    const oppP = v.players.find(function (p) { return p.id === opp; });
+    const flash = S.lcd && S.lcd.until > now ? S.lcd : null;
+    const led = function (label, on, color) { return h('span', { class: 'mh-led' }, h('i', { class: color + (on ? ' on' : '') }), h('small', null, label)); };
+    const top = h('div', { class: 'mh-devtop' },
+      h('div', { class: 'grille', 'aria-hidden': 'true' }),
+      h('div', { class: 'plate' }, h('b', null, 'منو هو؟'), h('small', null, 'ELECTRONIC')),
+      h('div', { class: 'leds' }, led('أنت', myTurn, 'g'), led(oppP.name, v.phase === 'turn' && !myTurn, 'r')),
+      h('div', { class: 'devbtns' },
+        h('button', { class: 'icon-btn', 'aria-label': 'الأسئلة', onclick: function () { S.sheet = 'log'; render(); } }, icon('list', 20)),
+        h('button', { class: 'icon-btn', 'aria-label': 'القائمة', onclick: function () { S.sheet = 'menu'; render(); } }, icon('menu', 20))));
+    const lcd = h('div', { class: 'mh-lcd' + (flash ? ' flash ' + flash.cls : ''), 'aria-live': 'polite', 'data-seat': opp },
+      h('div', { class: 'row' },
+        h('span', null, oppP.name + (oppP.connected ? '' : ' (غير متصل)') + ' · باقي ' + (N - oppP.down)),
+        h('span', { class: 'digits', id: 'mh-timer' }, left === null || v.phase !== 'turn' ? '-:--' : h('span', { class: 'num' }, Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0')))),
+      flash ? h('div', { class: 'main' }, h('div', { class: 'q' }, flash.q), h('div', { class: 'a' }, flash.a)) : h('div', { class: 'main' }, h('div', { class: 'q' }, lcdStatus(v))),
+      h('div', { class: 'row' }, h('span', null, 'أنت ' + v.scores[v.you] + ' – ' + v.scores[opp] + ' ' + oppP.name), h('span', null, 'الجولة ' + v.round)));
+    const board = h('div', { class: 'mh-board' + (S.guessMode ? ' guessing' : '') }, C.CHARACTERS.map(function (c, i) {
+      const down = S.down.indexOf(i) >= 0;
+      return faceCard(i, { down: down, cls: S.guessMode && !down ? 'guessable' : '', onClick: function () { toggle(i); } });
+    }));
+    const deck = h('div', { class: 'mh-deck' + (myTurn ? ' turn' : ''), 'data-seat': v.you },
+      h('button', { class: 'mh-secret', 'aria-label': 'شخصيتك', onclick: function () { S.sheet = 'secret'; render(); } },
+        h('span', { class: 'window' }, faceCard(v.secret, { tag: 'div', cls: 'mini' })), h('span', { class: 'lbl' }, 'شخصيتك', h('b', null, C.CHARACTERS[v.secret].name))),
+      actionPanel(v),
+      reactButton());
+    return h('div', { class: 'mh-app mh-elec seat-' + v.playerIds.indexOf(v.you) },
+      h('div', { class: 'mh-dev' }, top, lcd, h('div', { class: 'mh-tray' }, board), deck),
+      S.reacts ? h('div', { class: 'mh-reactwrap' }, reactRow()) : null);
   }
 
   function gameScreen() {
+    if (S.elec) return elecScreen();
     const v = S.game;
     const left = secondsOf(S.timerEnd);
     const myTurn = v.phase === 'turn' && v.currentPlayerId === v.you;
@@ -503,6 +592,11 @@
     const muted = SND.isMuted();
     const amHost = S.room && S.room.hostId === S.you;
     return sheet('القائمة', h('div', { class: 'menu-list' },
+      h('button', { class: 'with-icon', 'aria-pressed': S.elec ? 'true' : 'false', onclick: function () { S.elec = !S.elec; store(GAME + '.elec', S.elec); S.lcd = null; render(); } },
+        icon('target', 20), S.elec ? 'النسخة الإلكترونية - اضغط للشكل الكلاسيكي' : 'الشكل الكلاسيكي - اضغط للنسخة الإلكترونية'),
+      S.elec ? h('button', { class: 'with-icon', 'aria-pressed': S.voice ? 'true' : 'false', onclick: function () { S.voice = !S.voice; store(GAME + '.voice', S.voice); if (S.voice) speak('أهلاً، أنا أقرأ الأسئلة والأجوبة'); render(); } },
+        icon('sound', 20), S.voice ? 'الصوت الناطق يعمل' : 'الصوت الناطق متوقف') : null,
+      S.elec && S.voice && !arVoice ? h('div', { class: 'dim small center' }, 'ما لكينا صوت عربي بجهازك، فالأسئلة تظهر على الشاشة بس.') : null,
       h('button', { class: 'with-icon', onclick: function () { S.sheet = 'log'; render(); } }, icon('list', 20), 'الأسئلة والأجوبة'),
       h('button', { class: 'with-icon', onclick: function () { S.sheet = 'help'; render(); } }, icon('help', 20), 'طريقة اللعب'),
       h('button', { class: 'with-icon', onclick: function () { SND.setMuted(!muted); render(); } }, icon(muted ? 'mute' : 'sound', 20), muted ? 'الصوت مكتوم - اضغط للتشغيل' : 'الصوت يعمل - اضغط للكتم'),
@@ -565,6 +659,7 @@
       const num = el.querySelector('.num');
       if (num && s !== null) num.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
     }
+    if (S.lcd && S.lcd.until <= Date.now()) { S.lcd = null; render(); }
     const nx = document.getElementById('mh-next');
     if (nx && S.nextEnd) nx.textContent = 'الجولة التالية بعد ' + secondsOf(S.nextEnd) + ' ثانية…';
     if (S.status !== 'open' && Date.now() - (S.lastSlow || 0) > 1000) { S.lastSlow = Date.now(); render(); }

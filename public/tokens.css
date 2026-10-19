@@ -207,6 +207,23 @@
   --mh-no: #ff6b6b;
   --mh-glow-a: #ffb86b;
   --mh-glow-b: #5b8cff;
+  /* minhu electronic edition: red and blue plastic, a green LCD, LEDs, arcade buttons */
+  --mh-dev-red: #d63a3a;
+  --mh-dev-red-2: #8f1d24;
+  --mh-dev-blue: #2f6fd6;
+  --mh-dev-blue-2: #173c86;
+  --mh-lcd: #a7bf8b;
+  --mh-lcd-2: #8ea874;
+  --mh-lcd-ink: #1d2a12;
+  --mh-bezel: #17181d;
+  --mh-led-g: #4dff7a;
+  --mh-led-r: #ff4d4d;
+  --mh-arc-y: #ffcc33;
+  --mh-arc-r: #ff5a4f;
+  --mh-arc-b: #3fa4ff;
+  --mh-arc-g: #3ddc84;
+  --mh-arc-k: #b9bec7;
+  --mh-metal: #d9dde3;
 
   /* spacing scale: multiples of 4px */
   --s1: 4px;

@@ -210,3 +210,95 @@ body:has(.mh-app), body:has(.mh-shell) {
 .mh-link { display: flex; align-items: center; justify-content: center; min-height: 48px; border: 1.5px solid var(--brass); border-radius: var(--r-btn); color: var(--text); text-decoration: none; }
 .help-list { margin: 0; padding-inline-start: var(--s4); display: flex; flex-direction: column; gap: var(--s3); line-height: 1.7; }
 @media (prefers-reduced-motion: reduce) { .mh-card .inner { transition: none; } }
+
+/* ================= the electronic edition ================= */
+.mh-elec.seat-0 { --dev: var(--mh-dev-red); --dev-2: var(--mh-dev-red-2); }
+.mh-elec.seat-1 { --dev: var(--mh-dev-blue); --dev-2: var(--mh-dev-blue-2); }
+.mh-elec { padding: calc(env(safe-area-inset-top) + 6px) calc(env(safe-area-inset-right) + 6px) calc(env(safe-area-inset-bottom) + 6px) calc(env(safe-area-inset-left) + 6px); }
+
+/* the plastic body, with four screws */
+.mh-dev {
+  flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--s2); position: relative; padding: 12px 12px 10px;
+  border-radius: 30px; background:
+    radial-gradient(circle at 16px 16px, var(--mh-metal) 2.5px, color-mix(in srgb, var(--ink) 55%, transparent) 3.5px, transparent 4.5px),
+    radial-gradient(circle at calc(100% - 16px) 16px, var(--mh-metal) 2.5px, color-mix(in srgb, var(--ink) 55%, transparent) 3.5px, transparent 4.5px),
+    radial-gradient(circle at 16px calc(100% - 16px), var(--mh-metal) 2.5px, color-mix(in srgb, var(--ink) 55%, transparent) 3.5px, transparent 4.5px),
+    radial-gradient(circle at calc(100% - 16px) calc(100% - 16px), var(--mh-metal) 2.5px, color-mix(in srgb, var(--ink) 55%, transparent) 3.5px, transparent 4.5px),
+    linear-gradient(160deg, color-mix(in srgb, var(--paper) 14%, var(--dev)), var(--dev) 35%, var(--dev-2));
+  box-shadow: inset 0 2px 0 color-mix(in srgb, var(--paper) 40%, transparent), inset 0 -7px 0 color-mix(in srgb, var(--ink) 30%, transparent),
+    0 22px 46px color-mix(in srgb, var(--ink) 65%, transparent);
+}
+.mh-devtop { display: flex; align-items: center; gap: var(--s3); padding: 0 var(--s4); min-height: 44px; }
+.mh-devtop .grille { width: 64px; height: 26px; border-radius: 13px; flex: none;
+  background: radial-gradient(circle, color-mix(in srgb, var(--ink) 60%, transparent) 1.6px, transparent 2.2px) 0 0 / 8px 8px, color-mix(in srgb, var(--ink) 18%, var(--dev-2));
+  box-shadow: inset 0 2px 4px color-mix(in srgb, var(--ink) 50%, transparent); }
+.mh-devtop .plate { flex: 1; display: flex; flex-direction: column; align-items: center; line-height: 1; min-width: 0; }
+.mh-devtop .plate b { font-family: var(--font-display); font-weight: 400; font-size: var(--fs-4); color: var(--paper); text-shadow: 0 2px 0 color-mix(in srgb, var(--ink) 45%, transparent), 0 -1px 0 color-mix(in srgb, var(--paper) 30%, transparent); }
+.mh-devtop .plate small { font-size: 9px; letter-spacing: .35em; font-weight: 700; color: color-mix(in srgb, var(--paper) 75%, transparent); margin-top: 2px; direction: ltr; }
+.mh-devtop .leds { display: flex; gap: var(--s3); }
+.mh-led { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.mh-led i { width: 13px; height: 13px; border-radius: 50%; background: color-mix(in srgb, var(--ink) 75%, var(--dev-2)); box-shadow: inset 0 2px 3px color-mix(in srgb, var(--ink) 70%, transparent), 0 1px 0 color-mix(in srgb, var(--paper) 25%, transparent); }
+.mh-led i.g.on { background: radial-gradient(circle at 40% 35%, var(--paper), var(--mh-led-g) 45%); box-shadow: 0 0 10px var(--mh-led-g), 0 0 22px color-mix(in srgb, var(--mh-led-g) 60%, transparent); animation: mh-ledblink 1.2s ease-in-out infinite; }
+.mh-led i.r.on { background: radial-gradient(circle at 40% 35%, var(--paper), var(--mh-led-r) 45%); box-shadow: 0 0 10px var(--mh-led-r), 0 0 22px color-mix(in srgb, var(--mh-led-r) 60%, transparent); }
+.mh-led small { font-size: 9px; font-weight: 700; color: color-mix(in srgb, var(--paper) 80%, transparent); max-width: 56px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@keyframes mh-ledblink { 50% { opacity: .55; } }
+.mh-devtop .devbtns { display: flex; }
+.mh-devtop .icon-btn { width: 36px; height: 36px; min-height: 36px; color: var(--paper); border-radius: 50%; background: color-mix(in srgb, var(--ink) 22%, transparent); }
+
+/* the LCD in its black bezel */
+.mh-lcd {
+  margin: 0 var(--s2); padding: var(--s2) var(--s3); border-radius: 10px; color: var(--mh-lcd-ink); min-height: 106px; display: flex; flex-direction: column; justify-content: space-between; gap: 2px;
+  background: repeating-linear-gradient(0deg, color-mix(in srgb, var(--mh-lcd-ink) 6%, transparent) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, color-mix(in srgb, var(--mh-lcd-ink) 5%, transparent) 0 1px, transparent 1px 3px),
+    linear-gradient(180deg, var(--mh-lcd), var(--mh-lcd-2));
+  box-shadow: 0 0 0 6px var(--mh-bezel), 0 0 0 7px color-mix(in srgb, var(--paper) 20%, transparent), inset 0 3px 8px color-mix(in srgb, var(--ink) 35%, transparent);
+}
+.mh-lcd .row { display: flex; justify-content: space-between; align-items: center; font-size: var(--fs-1); font-weight: 700; opacity: .85; gap: var(--s2); }
+.mh-lcd .row span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mh-lcd .digits { font-family: var(--font-display); font-size: var(--fs-3); letter-spacing: .05em; opacity: 1; font-variant-numeric: tabular-nums; }
+.mh-lcd .main { text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 44px; }
+.mh-lcd .main .q { font-weight: 800; font-size: var(--fs-3); line-height: 1.35; }
+.mh-lcd .main .a { font-family: var(--font-display); font-size: 40px; line-height: 1.05; animation: mh-lcdblink .3s steps(2) 4; }
+.mh-lcd.flash .main .q { font-size: var(--fs-2); }
+.mh-lcd.flash.no .main .a { letter-spacing: .05em; }
+@keyframes mh-lcdblink { 50% { opacity: 0; } }
+
+/* the board tray */
+.mh-tray { flex: 1; min-height: 0; overflow-y: auto; display: flex; align-items: center; justify-content: center; padding: var(--s2); border-radius: 20px;
+  background: color-mix(in srgb, var(--ink) 30%, var(--dev-2)); box-shadow: inset 0 4px 10px color-mix(in srgb, var(--ink) 55%, transparent), 0 1px 0 color-mix(in srgb, var(--paper) 25%, transparent); }
+.mh-elec .mh-board { width: min(100%, calc((100dvh - 420px) / 4 * 0.78 * 6 + 40px)); }
+@media (max-aspect-ratio: 3/5) { .mh-elec .mh-board { width: min(100%, calc((100dvh - 420px) / 5 * 0.78 * 5 + 40px)); } }
+@media (min-aspect-ratio: 4/3) { .mh-elec .mh-board { width: min(100%, calc((100dvh - 380px) / 3 * 0.78 * 8 + 60px)); } }
+
+/* tiles: a face on a plastic tile in a slot; ruled out, it falls backwards like the real thing */
+.mh-elec .mh-card { perspective: 420px; border-radius: 9px; background: color-mix(in srgb, var(--ink) 55%, var(--dev-2)); box-shadow: inset 0 3px 6px color-mix(in srgb, var(--ink) 70%, transparent); }
+.mh-elec .mh-card .inner { transform-origin: 50% 100%; transition: transform .38s cubic-bezier(.55, 0, .3, 1.25); }
+.mh-elec .mh-card.down .inner { transform: rotateX(80deg); }
+.mh-elec .mh-card .back { display: none; }
+.mh-elec .mh-card .front { backface-visibility: visible; -webkit-backface-visibility: visible; border: 3px solid color-mix(in srgb, var(--paper) 18%, var(--dev)); border-radius: 9px;
+  box-shadow: 0 2px 0 color-mix(in srgb, var(--ink) 40%, transparent), 0 6px 10px color-mix(in srgb, var(--ink) 45%, transparent); }
+.mh-elec .mh-card.down .front { filter: brightness(.6); }
+.mh-elec .mh-card.guessable .front { border-color: var(--mh-arc-y); box-shadow: 0 0 0 2px var(--mh-arc-y), 0 0 14px color-mix(in srgb, var(--mh-arc-y) 60%, transparent); }
+
+/* the control deck: the secret in a little window, arcade buttons */
+.mh-deck { display: flex; align-items: center; gap: var(--s3); padding: var(--s1) var(--s2) var(--s1); position: relative; }
+.mh-deck > .icon-btn { width: 36px; height: 36px; min-height: 36px; color: var(--paper); align-self: flex-start; }
+.mh-elec .mh-secret .window { padding: 4px; border-radius: 10px; background: linear-gradient(160deg, var(--mh-metal), color-mix(in srgb, var(--ink) 35%, var(--mh-metal))); box-shadow: 0 2px 6px color-mix(in srgb, var(--ink) 50%, transparent); }
+.mh-elec .mh-secret .lbl { color: color-mix(in srgb, var(--paper) 80%, transparent); }
+.mh-elec .mh-secret .lbl b { color: var(--paper); }
+.mh-elec .mh-panel .mh-instr, .mh-elec .mh-panel .mh-wait, .mh-elec .mh-panel .mh-qa { display: none; }
+.mh-elec .mh-panel { min-height: 64px; }
+.mh-elec .mh-panel .btns > button {
+  --arc: var(--mh-arc-k); border: 0; border-radius: 999px; min-height: 54px; color: var(--ink); font-weight: 800; font-size: var(--fs-3);
+  background: radial-gradient(circle at 35% 25%, color-mix(in srgb, var(--paper) 55%, var(--arc)), var(--arc) 55%, color-mix(in srgb, var(--ink) 25%, var(--arc)));
+  box-shadow: 0 5px 0 color-mix(in srgb, var(--ink) 45%, var(--arc)), 0 9px 14px color-mix(in srgb, var(--ink) 45%, transparent), inset 0 2px 0 color-mix(in srgb, var(--paper) 60%, transparent);
+  transition: transform .06s, box-shadow .06s;
+}
+.mh-elec .mh-panel .btns > button:active:not(:disabled) { transform: translateY(4px); box-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 45%, var(--arc)), 0 3px 6px color-mix(in srgb, var(--ink) 45%, transparent), inset 0 2px 0 color-mix(in srgb, var(--paper) 60%, transparent); }
+.mh-elec .mh-panel .btns > button.arc-ask { --arc: var(--mh-arc-y); }
+.mh-elec .mh-panel .btns > button.arc-guess { --arc: var(--mh-arc-r); color: var(--paper); }
+.mh-elec .mh-panel .btns > button.arc-flip { --arc: var(--mh-arc-b); color: var(--paper); }
+.mh-elec .mh-panel .btns > button.arc-done { --arc: var(--mh-arc-g); }
+.mh-elec .mh-panel .btns > button.arc-cancel { --arc: var(--mh-arc-k); }
+.mh-elec + .mh-showres, .mh-elec .mh-reactwrap { bottom: 150px; }
+@media (prefers-reduced-motion: reduce) { .mh-led i.g.on, .mh-lcd .main .a { animation: none; } }

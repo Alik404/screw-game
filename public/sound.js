@@ -160,6 +160,15 @@
         n.start(t + d);
       });
     },
+    // the electronic edition of "Minhu?": square-wave beeps like a handheld toy
+    'e-beep': function (c, t) { tone(c, 'square', 988, 0, t, 0.07, 0.05); tone(c, 'square', 1319, 0, t + 0.09, 0.08, 0.05); },
+    'e-tick': function (c, t) { tone(c, 'square', 1600, 900, t, 0.025, 0.04); },
+    'e-yes': function (c, t) { [784, 988, 1319].forEach(function (f, i) { tone(c, 'square', f, 0, t + i * 0.09, 0.08, 0.05); }); },
+    'e-no': function (c, t) { tone(c, 'sawtooth', 220, 150, t, 0.38, 0.07); tone(c, 'square', 110, 90, t, 0.38, 0.04); },
+    'e-boot': function (c, t) { [523, 659, 784, 1047, 1568].forEach(function (f, i) { tone(c, 'square', f, 0, t + i * 0.07, 0.06, 0.045); }); },
+    'e-jingle': function (c, t) {
+      [784, 988, 1175, 1568, 1175, 1568].forEach(function (f, i) { tone(c, 'square', f, 0, t + i * 0.11, i === 5 ? 0.4 : 0.09, 0.05); });
+    },
     // the winner: a short fanfare
     win: function (c, t) {
       [523, 659, 784, 1047, 784, 1047].forEach(function (f, i) {
