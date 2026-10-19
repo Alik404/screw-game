@@ -62,6 +62,26 @@
         <a class="pt-btn primary" href="/bank.html">العب بنك الحظ</a>
       </div>
     </article>
+
+    <article class="pt-card" id="game-snakes">
+      <div class="pt-art">
+        <svg class="pt-sl" viewBox="0 0 250 250" aria-hidden="true">
+          <g id="sl-squares"></g>
+          <g class="lad"><line x1="62" y1="212" x2="112" y2="88"/><line x1="92" y1="224" x2="142" y2="100"/><line class="r" x1="70" y1="200" x2="98" y2="211"/><line class="r" x1="80" y1="174" x2="108" y2="185"/><line class="r" x1="91" y1="148" x2="119" y2="159"/><line class="r" x1="101" y1="122" x2="129" y2="133"/><line class="r" x1="112" y1="96" x2="140" y2="107"/></g>
+          <path class="snk" d="M188 44 C 228 80, 140 110, 186 146 S 160 210, 196 222"/>
+          <path class="snk-b" d="M188 44 C 228 80, 140 110, 186 146 S 160 210, 196 222"/>
+          <ellipse class="snk-h" cx="186" cy="40" rx="16" ry="12"/><circle class="eye" cx="181" cy="36" r="3.5"/><circle class="eye" cx="192" cy="36" r="3.5"/>
+        </svg>
+        <div class="pt-token" style="top: 26px; inset-inline-start: calc(50% - 30px)"></div>
+        <div class="pt-dice pt-dice-1" aria-hidden="true"></div>
+      </div>
+      <div class="pt-title"><h2>حية ودرج</h2><span class="pt-tag live">جديدة</span></div>
+      <p class="pt-desc">ارمِ النرد واصعد الدرج وانتبه من الحيات! أول من يوصل للمربع 100 يفوز. ثلاث لوحات، قواعد تختارها، ولاعبو كمبيوتر إذا كنت وحدك.</p>
+      <div class="pt-meta"><span>1 – 6 لاعبين</span><span>ضد الكمبيوتر</span><span>جوال وحاسوب</span></div>
+      <div class="pt-actions">
+        <a class="pt-btn primary" href="/snakes.html">العب حية ودرج</a>
+      </div>
+    </article>
   </section>
 
   <p class="pt-foot">الغرف تعيش في ذاكرة الخادم: إذا نام الخادم تُنشئ غرفة جديدة وتكمل.</p>
@@ -103,6 +123,20 @@
     const mid = document.createElement('i');
     mid.className = 'mid';
     board.append(mid);
+    // snakes art: a 5x5 checker board under the ladder and the snake, and one die
+    const sq = document.getElementById('sl-squares');
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 5; c++) {
+        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', c * 50); rect.setAttribute('y', r * 50); rect.setAttribute('width', 50); rect.setAttribute('height', 50);
+        rect.setAttribute('class', (r + c) % 2 ? 'b' : 'a r' + r);
+        sq.append(rect);
+      }
+    }
+    const one = document.querySelector('.pt-dice-1');
+    const six = document.createElement('span');
+    for (let k = 1; k <= 9; k++) { const b = document.createElement('b'); if ([1, 3, 4, 6, 7, 9].indexOf(k) >= 0) b.className = 'on'; six.append(b); }
+    one.append(six);
     const dice = document.querySelector('.pt-dice');
     [[5, 9, 1, 3, 7], [1, 3, 5, 7, 9, 4]].forEach(function (on) {
       const s = document.createElement('span');
@@ -112,7 +146,7 @@
     // a saved screw room? offer a way back
     try {
       // a saved seat (card game or bank game) gets the shortcut
-      const pick = [['screw', 'سكرو', '/screw.html'], ['bank', 'بنك الحظ', '/bank.html'], ['seven', 'سبعة وسبعة', '/seven.html']].map(function (g) {
+      const pick = [['screw', 'سكرو', '/screw.html'], ['bank', 'بنك الحظ', '/bank.html'], ['seven', 'سبعة وسبعة', '/seven.html'], ['snakes', 'حية ودرج', '/snakes.html']].map(function (g) {
         const s = JSON.parse(localStorage.getItem(g[0] + '.session') || 'null');
         return s && s.code ? { code: s.code, name: g[1], url: g[2] } : null;
       }).filter(Boolean)[0];

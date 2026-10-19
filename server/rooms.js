@@ -24,6 +24,8 @@ const MSG = {
   roomOtherGame: 'هذه الغرفة للعبة أخرى.',
   badToken: 'هذا الرمز غير متاح.',
   tokenTaken: 'هذا الرمز اختاره لاعب آخر.',
+  noBots: 'هذه اللعبة لا تدعم لاعبي الكمبيوتر.',
+  noBot: 'لاعب الكمبيوتر غير موجود.',
 };
 
 function createRooms(opts) {
@@ -78,7 +80,7 @@ function createRooms(opts) {
 
   function roster(room) {
     return room.players.map(function (p) {
-      return { id: p.seat, name: p.name, connected: !!p.conn, isHost: p.seat === room.hostSeat, token: p.token || null };
+      return { id: p.seat, name: p.name, connected: !!p.conn || !!p.bot, isHost: p.seat === room.hostSeat, token: p.token || null, bot: !!p.bot };
     });
   }
 
@@ -223,10 +225,10 @@ function createRooms(opts) {
     sendTo(conn, { type: 'joined', code: room.code, playerId: player.secret, you: player.seat, game: room.game });
   }
 
-  function addPlayer(room, name) {
+  function addPlayer(room, name, bot) {
     room.seq += 1;
     const player = {
-      seat: 'p' + room.seq, secret: crypto.randomUUID(), name: name, conn: null, graceTimer: null,
+      seat: 'p' + room.seq, secret: crypto.randomUUID(), name: name, conn: null, graceTimer: null, bot: !!bot,
     };
     // games with pieces: everybody starts with the first free one and may change it in the lobby
     const tokens = gameOf(room).tokens;
@@ -300,8 +302,41 @@ function createRooms(opts) {
     const tokens = gameOf(room).tokens;
     if (!tokens || typeof m.token !== 'string' || tokens.indexOf(m.token) < 0) return err(conn, MSG.badToken);
     const me = byConn(room, conn);
-    if (room.players.some(function (p) { return p !== me && p.token === m.token; })) return err(conn, MSG.tokenTaken);
+    const holder = room.players.find(function (p) { return p !== me && p.token === m.token; });
+    if (holder && !holder.bot) return err(conn, MSG.tokenTaken);
+    if (holder) holder.token = me.token; // a computer player just swaps with you
     me.token = m.token;
+    broadcastRoom(room);
+  };
+
+  // lobby only, host only: computer players for games that support them (they roll on a short timer)
+  function hostInLobby(conn) {
+    const room = conn.room;
+    if (!room) { err(conn, MSG.notIn); return null; }
+    if (byConn(room, conn).seat !== room.hostSeat) { err(conn, MSG.hostOnly); return null; }
+    if (started(room)) { err(conn, MSG.alreadyStarted); return null; }
+    if (!gameOf(room).bots) { err(conn, MSG.noBots); return null; }
+    return room;
+  }
+
+  handlers.add_bot = function (conn) {
+    const room = hostInLobby(conn);
+    if (!room) return;
+    if (room.players.length >= gameOf(room).maxPlayers) return err(conn, MSG.full);
+    const base = gameOf(room).botName || 'كمبيوتر';
+    let n = 1;
+    const taken = function (name) { return room.players.some(function (p) { return p.name === name; }); };
+    while (taken(base + ' ' + n)) n += 1;
+    addPlayer(room, base + ' ' + n, true);
+    broadcastRoom(room);
+  };
+
+  handlers.remove_bot = function (conn, m) {
+    const room = hostInLobby(conn);
+    if (!room) return;
+    const bot = room.players.find(function (p) { return p.bot && p.seat === m.id; });
+    if (!bot) return err(conn, MSG.noBot);
+    room.players = room.players.filter(function (p) { return p !== bot; });
     broadcastRoom(room);
   };
 
@@ -314,13 +349,14 @@ function createRooms(opts) {
     // only players who are actually here take part
     room.players = room.players.filter(function (p) {
       if (!p.conn && p.graceTimer) clearTimer(p.graceTimer);
-      return !!p.conn;
+      return !!p.conn || p.bot;
     });
     if (room.players.length < gameOf(room).minPlayers) return err(conn, MSG.needPlayers);
     const game = gameOf(room);
     // host options (e.g. number of rounds): the adapter picks only what it understands
     const options = game.startOptions ? game.startOptions(m) : undefined;
-    const g = game.create(room.players.map(function (p) { return p.seat; }), options);
+    const bots = room.players.filter(function (p) { return p.bot; }).map(function (p) { return p.seat; });
+    const g = game.create(room.players.map(function (p) { return p.seat; }), options, { bots: bots });
     if (g.error) return err(conn, g.error);
     commit(room, { state: g.state, events: g.events || [], privates: [] });
     broadcastRoom(room);

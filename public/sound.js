@@ -102,6 +102,43 @@
       env(c, f, t, 0.35, 0.005, 0.2);
       n.start(t);
     },
+    // dice rattling in a cup: a few quick knocks
+    dice: function (c, t) {
+      [0, 0.07, 0.15, 0.26, 0.4].forEach(function (d, i) {
+        const n = noise(c, 0.04);
+        const f = c.createBiquadFilter();
+        f.type = 'bandpass';
+        f.frequency.value = 1400 + i * 260;
+        n.connect(f);
+        env(c, f, t + d, 0.32 - i * 0.04, 0.002, 0.035);
+        n.start(t + d);
+      });
+    },
+    // a piece landing on a square: a soft wooden tock
+    step: function (c, t) {
+      tone(c, 'triangle', 520, 380, t, 0.07, 0.12);
+    },
+    // climbing a ladder: quick rising notes
+    ladder: function (c, t) {
+      [523, 659, 784, 1047].forEach(function (f, i) { tone(c, 'triangle', f, 0, t + i * 0.08, 0.16, 0.16); });
+    },
+    // a snake: a hiss and a falling slide
+    snake: function (c, t) {
+      const n = noise(c, 0.45);
+      const f = c.createBiquadFilter();
+      f.type = 'highpass';
+      f.frequency.value = 4200;
+      n.connect(f);
+      env(c, f, t, 0.18, 0.05, 0.4);
+      n.start(t);
+      tone(c, 'sine', 700, 120, t + 0.12, 0.7, 0.2);
+    },
+    // the winner: a short fanfare
+    win: function (c, t) {
+      [523, 659, 784, 1047, 784, 1047].forEach(function (f, i) {
+        tone(c, 'triangle', f, 0, t + i * 0.12, i === 5 ? 0.5 : 0.14, 0.18);
+      });
+    },
   };
 
   function play(name, delayMs) {

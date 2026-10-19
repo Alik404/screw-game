@@ -46,7 +46,7 @@ function client(port) {
 test('serves the pages and shared engine files, and nothing else from server/', async () => {
   const { app, base } = await boot();
   try {
-    for (const p of ['/', '/index.html', '/screw.html', '/bank.html', '/seven.html', '/seven/app.js', '/seven/debug.html', '/server/games/seven/engine.js', '/portal.css', '/bank/preview.html', '/debug.html', '/server/engine.js', '/server/deck.js', '/server/config.js']) {
+    for (const p of ['/', '/index.html', '/screw.html', '/bank.html', '/seven.html', '/seven/app.js', '/snakes.html', '/snakes/app.js', '/snakes/board.js', '/snakes/snakes.css', '/server/games/snakes/config.js', '/server/games/snakes/engine.js', '/seven/debug.html', '/server/games/seven/engine.js', '/portal.css', '/bank/preview.html', '/debug.html', '/server/engine.js', '/server/deck.js', '/server/config.js']) {
       const r = await get(base + p);
       assert.equal(r.status, 200, p);
     }

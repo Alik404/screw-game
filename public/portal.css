@@ -10,6 +10,7 @@ body.portal { min-height: 100dvh; }
   background: var(--table-deep); border: 1.5px solid var(--brass); border-radius: var(--r-btn); padding: var(--s3) var(--s4);
   color: var(--text); text-decoration: none;
 }
+.pt-back[hidden] { display: none; }
 .pt-back b { color: var(--brass); }
 .pt-back span.go { background: var(--brass); color: var(--ink); font-weight: 700; border-radius: var(--r-btn); padding: var(--s2) var(--s4); white-space: nowrap; }
 
@@ -76,3 +77,16 @@ body.portal { min-height: 100dvh; }
 .pt-ucard:nth-child(2) { transform: translateX(26px) rotate(-6deg); z-index: 1; }
 .pt-ucard:nth-child(3) { transform: translateX(-26px) rotate(6deg); z-index: 2; }
 .pt-ucard:nth-child(4) { transform: translateX(-78px) rotate(18deg); z-index: 3; }
+
+/* snakes art: a tilted mini board with a ladder and a snake */
+.pt-sl { width: 132px; height: 132px; border-radius: 12px; transform: rotate(5deg); box-shadow: var(--shadow); background: var(--wood); }
+.pt-sl rect.a.r0 { fill: var(--sl-row1); } .pt-sl rect.a.r1 { fill: var(--sl-row2); } .pt-sl rect.a.r2 { fill: var(--sl-row3); }
+.pt-sl rect.a.r3 { fill: var(--sl-row4); } .pt-sl rect.a.r4 { fill: var(--sl-row5); }
+.pt-sl rect.b { fill: var(--sl-cream); }
+.pt-sl .lad line { stroke: var(--sl-rail); stroke-width: 8; stroke-linecap: round; }
+.pt-sl .lad line.r { stroke: var(--sl-rung); stroke-width: 6; }
+.pt-sl .snk { fill: none; stroke: var(--sl-snake1-d); stroke-width: 22; stroke-linecap: round; }
+.pt-sl .snk-b { fill: none; stroke: var(--sl-snake1); stroke-width: 16; stroke-linecap: round; }
+.pt-sl .snk-h { fill: var(--sl-snake1); stroke: var(--sl-snake1-d); stroke-width: 3; }
+.pt-sl .eye { fill: var(--paper); }
+#game-snakes .pt-dice { inset-inline-start: auto; inset-inline-end: calc(50% - 96px); bottom: 12px; }

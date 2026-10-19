@@ -100,6 +100,28 @@
   --wood: #6b4528;       /* 3D board frame */
   --wood-dark: #3f2816;
 
+  /* snakes & ladders: board rows, ladders and the five snake colours */
+  --sl-row1: #f7cf7a;
+  --sl-row2: #a6dcc6;
+  --sl-row3: #f5aaa0;
+  --sl-row4: #aecbf2;
+  --sl-row5: #cdb8ee;
+  --sl-cream: #fbf6ea;
+  --sl-num: #5a4a35;
+  --sl-rail: #7a4b25;
+  --sl-rung: #b9824b;
+  --sl-shadow: rgba(0, 0, 0, 0.2);
+  --sl-snake1: #3f9d4f;
+  --sl-snake1-d: #1f5e2b;
+  --sl-snake2: #e2663b;
+  --sl-snake2-d: #8c2f12;
+  --sl-snake3: #8a5ccc;
+  --sl-snake3-d: #4b2c7d;
+  --sl-snake4: #2d8bcc;
+  --sl-snake4-d: #15507a;
+  --sl-snake5: #d9a521;
+  --sl-snake5-d: #7d5c07;
+
   /* spacing scale: multiples of 4px */
   --s1: 4px;
   --s2: 8px;

@@ -4,12 +4,15 @@
 //   timeout(state, kind) -> result            what the server does when one runs out
 //   messageFor(event) -> message to broadcast for an engine event
 //   host: optional host-only actions (next_round, new_game, end_game)
+//   bots: true when the host may add computer players in the lobby (create gets {bots: [seats]})
 const SCREW_CONFIG = require('../config');
 const SCREW = require('../engine');
 const BANK_CONFIG = require('./bank/config');
 const BANK = require('./bank/engine');
 const SEVEN_CONFIG = require('./seven/config');
 const SEVEN = require('./seven/engine');
+const SNAKES_CONFIG = require('./snakes/config');
+const SNAKES = require('./snakes/engine');
 
 const screw = {
   id: 'screw',
@@ -162,4 +165,51 @@ const seven = {
   },
 };
 
-module.exports = { screw: screw, bank: bank, seven: seven };
+const snakes = {
+  id: 'snakes',
+  minPlayers: SNAKES_CONFIG.MIN_PLAYERS,
+  maxPlayers: SNAKES_CONFIG.MAX_PLAYERS,
+  actions: ['roll'],
+  fields: ['type'], // the die is always rolled by the server
+  tokens: SNAKES_CONFIG.COLORS,
+  bots: true,
+  botName: SNAKES_CONFIG.BOT_NAME,
+  startOptions: function (m) {
+    const o = m && m.options && typeof m.options === 'object' ? m.options : {};
+    return { board: o.board, finish: o.finish, sixAgain: o.sixAgain, startSix: o.startSix };
+  },
+  create: function (seats, options, extra) {
+    const o = Object.assign({}, options);
+    o.bots = extra && extra.bots;
+    return SNAKES.createGame(seats, o);
+  },
+  act: function (state, seat, action) { return SNAKES.act(state, seat, action); },
+  view: function (state, seat) { return SNAKES.viewFor(state, seat); },
+  decorate: function (view, roster) {
+    view.players = view.players.map(function (vp) {
+      const rp = roster.find(function (p) { return p.id === vp.id; });
+      vp.name = rp.name;
+      vp.connected = rp.connected;
+      vp.isHost = rp.isHost;
+      vp.token = rp.token;
+      return vp;
+    });
+  },
+  // one clock per roll (a six that rolls again restarts it); computer players get a short pause instead
+  timers: function (s) {
+    if (s.phase !== 'turn') return [];
+    if (s.bots.indexOf(s.playerIds[s.current]) >= 0) return [{ kind: 'bot', key: 'bot:' + s.rollCount, seconds: SNAKES_CONFIG.BOT_SECONDS }];
+    return [{ kind: 'turn', key: 'turn:' + s.rollCount, seconds: SNAKES_CONFIG.TURN_SECONDS }];
+  },
+  timeout: function (s) { return SNAKES.autoPlay(s); },
+  messageFor: function (ev) { return { type: 'event', event: ev }; },
+  host: {
+    new_game: function (s) {
+      if (s.phase !== 'gameOver') return { error: SNAKES.ERR.wrongStage };
+      return SNAKES.createGame(s.playerIds, Object.assign({}, s.options, { bots: s.bots }));
+    },
+    end_game: function (s) { return SNAKES.endGameEarly(s); },
+  },
+};
+
+module.exports = { screw: screw, bank: bank, seven: seven, snakes: snakes };
