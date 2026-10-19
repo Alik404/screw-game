@@ -139,6 +139,24 @@
   --dm-team-a: #4fa3ff;
   --dm-team-b: #ef5b52;
 
+  /* tawla: a walnut frame, a lighter wood surface, inlaid points, ivory and black checkers */
+  --tw-frame: #4a2a16;
+  --tw-frame-line: #2a160a;
+  --tw-surface: #c38c55;
+  --tw-surface-line: #a26d3b;
+  --tw-pt-a: #f1e2bf;
+  --tw-pt-b: #6e2a20;
+  --tw-tray: #2a170b;
+  --tw-white: #fdf8ec;
+  --tw-white-2: #d9caa6;
+  --tw-white-rim: #b8914a;
+  --tw-black: #44444d;
+  --tw-black-2: #111115;
+  --tw-black-rim: #a3343f;
+  --tw-die: #fbf6e8;
+  --tw-die-edge: #c9ba93;
+  --tw-pip: #1a1e29;
+
   /* spacing scale: multiples of 4px */
   --s1: 4px;
   --s2: 8px;

@@ -668,7 +668,7 @@
     const myTurn = v.phase === 'turn' && v.currentPlayerId === v.you;
     const me = v.players.find(function (p) { return p.id === v.you; });
     const t = tableView();
-    const felt = h('div', { class: 'dm-felt' + (myTurn ? ' myturn' : ''), id: 'dm-felt' },
+    const felt = h('div', { class: 'dm-felt' + (myTurn ? ' dm-mine' : ''), id: 'dm-felt' },
       t.el,
       v.options.mode === 'draw' && v.playerIds.length < C.MAX_PLAYERS ? h('div', { class: 'dm-yard', 'data-yard': '', 'aria-label': 'الكومة: ' + v.yard },
         h('span', { class: 'dm-stack' }, v.yard ? backs(Math.min(3, v.yard)) : h('i', { class: 'dm-back empty' })), h('b', null, v.yard)) : null,

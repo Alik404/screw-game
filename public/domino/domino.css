@@ -48,7 +48,7 @@
   box-shadow: inset 0 0 0 5px var(--wood), inset 0 0 0 8px var(--wood-dark), inset 0 10px 34px color-mix(in srgb, var(--ink) 55%, transparent), var(--shadow);
   transition: box-shadow .25s;
 }
-.dm-felt.myturn { box-shadow: inset 0 0 0 5px var(--wood), inset 0 0 0 8px var(--brass), inset 0 10px 34px color-mix(in srgb, var(--ink) 55%, transparent), var(--shadow); }
+.dm-felt.dm-mine { box-shadow: inset 0 0 0 5px var(--wood), inset 0 0 0 8px var(--brass), inset 0 10px 34px color-mix(in srgb, var(--ink) 55%, transparent), var(--shadow); }
 .dm-svg { position: absolute; inset: 12px; width: calc(100% - 24px); height: calc(100% - 24px); display: block; direction: ltr; overflow: visible; }
 .dm-yard { position: absolute; top: 14px; inset-inline-start: 16px; display: flex; align-items: center; gap: var(--s2); padding: 3px var(--s3) 3px var(--s2); border-radius: 999px; background: color-mix(in srgb, var(--dm-felt-deep) 80%, transparent); color: var(--dm-ivory); font-weight: 700; font-size: var(--fs-1); }
 .dm-yard .dm-stack { display: inline-flex; }

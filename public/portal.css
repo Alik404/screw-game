@@ -100,3 +100,13 @@ body.portal { min-height: 100dvh; }
 .pt-dt.t2 { top: 42px; left: 76px; }
 .pt-dt.t3 { top: 25px; left: 138px; }
 .pt-dt.t4 { top: 10px; left: 60px; transform: rotate(18deg) translateY(-18px); }
+
+/* tawla art: a small wooden board */
+.pt-tw { width: 190px; height: 121px; transform: rotate(3deg); filter: drop-shadow(0 6px 10px color-mix(in srgb, var(--ink) 50%, transparent)); }
+.pt-tw .fr { fill: var(--tw-frame); }
+.pt-tw .sf { fill: var(--tw-surface); }
+.pt-tw .pa { fill: var(--tw-pt-a); }
+.pt-tw .pb { fill: var(--tw-pt-b); }
+.pt-tw .ck.w { fill: var(--tw-white); stroke: var(--tw-white-rim); stroke-width: 2; }
+.pt-tw .ck.b { fill: var(--tw-black); stroke: var(--tw-black-rim); stroke-width: 2; }
+.pt-tw .dz { fill: var(--tw-die); stroke: var(--tw-die-edge); stroke-width: 1.5; }

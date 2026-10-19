@@ -15,6 +15,8 @@ const SNAKES_CONFIG = require('./snakes/config');
 const SNAKES = require('./snakes/engine');
 const DOMINO_CONFIG = require('./domino/config');
 const DOMINO = require('./domino/engine');
+const TAWLA_CONFIG = require('./tawla/config');
+const TAWLA = require('./tawla/engine');
 
 // The clock for whoever's move it is, in games with computer players: a short pause for a computer
 // player or someone who is away, the full turn otherwise, and nothing at all when no human is connected.
@@ -274,4 +276,57 @@ const domino = {
   },
 };
 
-module.exports = { screw: screw, bank: bank, seven: seven, snakes: snakes, domino: domino };
+const tawla = {
+  id: 'tawla',
+  minPlayers: TAWLA_CONFIG.MIN_PLAYERS,
+  maxPlayers: TAWLA_CONFIG.MAX_PLAYERS,
+  actions: ['roll', 'move', 'undo', 'done'],
+  fields: ['type', 'from', 'die'], // the dice are always rolled by the server
+  bots: true,
+  botName: TAWLA_CONFIG.BOT_NAME,
+  startOptions: function (m) {
+    const o = m && m.options && typeof m.options === 'object' ? m.options : {};
+    return { target: o.target };
+  },
+  checkOptions: function (o) { return TAWLA.readOptions(o) ? null : TAWLA.ERR.badOptions; },
+  create: function (seats, options, extra) {
+    const o = Object.assign({}, options);
+    o.bots = extra && extra.bots;
+    return TAWLA.createGame(seats, o);
+  },
+  act: function (state, seat, action) { return TAWLA.act(state, seat, action); },
+  view: function (state, seat) { return TAWLA.viewFor(state, seat); },
+  decorate: function (view, roster) {
+    view.players = view.players.map(function (vp) {
+      const rp = roster.find(function (p) { return p.id === vp.id; });
+      vp.name = rp.name;
+      vp.connected = rp.connected;
+      vp.isHost = rp.isHost;
+      return vp;
+    });
+  },
+  // a short clock to roll and a long one to move (steps and undo do not restart it); a pause between games
+  timers: function (s, roster) {
+    if (s.phase === 'turn') {
+      const rolling = s.stage === 'roll';
+      const cfg = { BOT_SECONDS: TAWLA_CONFIG.BOT_SECONDS, AWAY_SECONDS: TAWLA_CONFIG.AWAY_SECONDS, TURN_SECONDS: rolling ? TAWLA_CONFIG.ROLL_SECONDS : TAWLA_CONFIG.MOVE_SECONDS };
+      return playerClock(roster, s.bots, s.playerIds[s.current], s.game + ':' + s.turnCount + (rolling ? 'r' : 'm'), cfg);
+    }
+    if (s.phase === 'gameEnd' && (!roster || roster.some(function (p) { return p.connected && !p.bot; }))) {
+      return [{ kind: 'next', key: 'next:' + s.game, seconds: TAWLA_CONFIG.NEXT_GAME_SECONDS }];
+    }
+    return [];
+  },
+  timeout: function (s, kind) { return kind === 'next' ? TAWLA.nextGame(s) : TAWLA.autoPlay(s); },
+  messageFor: function (ev) { return { type: 'event', event: ev }; },
+  host: {
+    next_round: function (s) { return TAWLA.nextGame(s); },
+    new_game: function (s) {
+      if (s.phase !== 'matchOver') return { error: TAWLA.ERR.wrongStage };
+      return TAWLA.createGame(s.playerIds, Object.assign({}, s.options, { bots: s.bots }));
+    },
+    end_game: function (s) { return TAWLA.endGameEarly(s); },
+  },
+};
+
+module.exports = { screw: screw, bank: bank, seven: seven, snakes: snakes, domino: domino, tawla: tawla };

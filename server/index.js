@@ -26,6 +26,8 @@ const SHARED = {
   '/server/games/snakes/engine.js': path.join(__dirname, 'games', 'snakes', 'engine.js'),
   '/server/games/domino/config.js': path.join(__dirname, 'games', 'domino', 'config.js'),
   '/server/games/domino/engine.js': path.join(__dirname, 'games', 'domino', 'engine.js'),
+  '/server/games/tawla/config.js': path.join(__dirname, 'games', 'tawla', 'config.js'),
+  '/server/games/tawla/engine.js': path.join(__dirname, 'games', 'tawla', 'engine.js'),
 };
 
 const TYPES = {

@@ -93,6 +93,16 @@
         <a class="pt-btn primary" href="/domino.html">العب دومنو</a>
       </div>
     </article>
+
+    <article class="pt-card" id="game-tawla">
+      <div class="pt-art"><svg class="pt-tw" id="tawla-art" viewBox="0 0 220 140" aria-hidden="true"></svg></div>
+      <div class="pt-title"><h2>طاولي</h2><span class="pt-tag live">جديدة</span></div>
+      <p class="pt-desc">الطاولي على لوح خشب: ارمِ الزار، حرّك قطعك، اضرب قطع خصمك وخرّج قبله. المارس بنقطتين، والمباراة إلى 1 أو 3 أو 5 أو 7.</p>
+      <div class="pt-meta"><span>لاعبان</span><span>ضد الكمبيوتر</span><span>اضغط أو اسحب</span></div>
+      <div class="pt-actions">
+        <a class="pt-btn primary" href="/tawla.html">العب طاولي</a>
+      </div>
+    </article>
   </section>
 
   <p class="pt-foot">الغرف تعيش في ذاكرة الخادم: إذا نام الخادم تُنشئ غرفة جديدة وتكمل.</p>
@@ -155,6 +165,28 @@
       s.innerHTML = t[0] === 'h' ? DT.tileSVGh(t[1], t[2]) : DT.tileSVG(t[1], t[2]);
       dm.append(s);
     });
+    // tawla art: a small wooden board
+    (function () {
+      const s = document.getElementById('tawla-art');
+      const NS = 'http://www.w3.org/2000/svg';
+      const add = function (tag, a) { const e = document.createElementNS(NS, tag); Object.keys(a).forEach(function (k) { e.setAttribute(k, a[k]); }); s.append(e); return e; };
+      add('rect', { x: 0, y: 0, width: 220, height: 140, rx: 12, class: 'fr' });
+      add('rect', { x: 8, y: 8, width: 96, height: 124, rx: 3, class: 'sf' });
+      add('rect', { x: 116, y: 8, width: 96, height: 124, rx: 3, class: 'sf' });
+      for (let i = 0; i < 6; i++) {
+        [8, 116].forEach(function (x0) {
+          const x = x0 + i * 16;
+          add('path', { d: 'M' + x + ' 8 L' + (x + 16) + ' 8 L' + (x + 8) + ' 62 Z', class: i % 2 ? 'pa' : 'pb' });
+          add('path', { d: 'M' + x + ' 132 L' + (x + 16) + ' 132 L' + (x + 8) + ' 78 Z', class: i % 2 ? 'pb' : 'pa' });
+        });
+      }
+      [[124, 124, 'w'], [124, 110, 'w'], [204, 16, 'w'], [204, 30, 'w'], [16, 124, 'b'], [16, 110, 'b'], [16, 96, 'b'], [76, 16, 'b'], [76, 30, 'b'], [172, 124, 'w']].forEach(function (c) {
+        add('circle', { cx: c[0], cy: c[1], r: 7, class: 'ck ' + c[2] });
+      });
+      [[146, 60, 5, -12], [168, 66, 3, 10]].forEach(function (d) {
+        add('rect', { x: d[0], y: d[1], width: 18, height: 18, rx: 4, class: 'dz', transform: 'rotate(' + d[3] + ' ' + (d[0] + 9) + ' ' + (d[1] + 9) + ')' });
+      });
+    })();
     const one = document.querySelector('.pt-dice-1');
     const six = document.createElement('span');
     for (let k = 1; k <= 9; k++) { const b = document.createElement('b'); if ([1, 3, 4, 6, 7, 9].indexOf(k) >= 0) b.className = 'on'; six.append(b); }
@@ -168,7 +200,7 @@
     // a saved screw room? offer a way back
     try {
       // a saved seat (card game or bank game) gets the shortcut
-      const pick = [['screw', 'سكرو', '/screw.html'], ['bank', 'بنك الحظ', '/bank.html'], ['seven', 'سبعة وسبعة', '/seven.html'], ['snakes', 'حية ودرج', '/snakes.html'], ['domino', 'دومنو', '/domino.html']].map(function (g) {
+      const pick = [['screw', 'سكرو', '/screw.html'], ['bank', 'بنك الحظ', '/bank.html'], ['seven', 'سبعة وسبعة', '/seven.html'], ['snakes', 'حية ودرج', '/snakes.html'], ['domino', 'دومنو', '/domino.html'], ['tawla', 'طاولي', '/tawla.html']].map(function (g) {
         const s = JSON.parse(localStorage.getItem(g[0] + '.session') || 'null');
         return s && s.code ? { code: s.code, name: g[1], url: g[2] } : null;
       }).filter(Boolean)[0];
