@@ -45,6 +45,7 @@
     // timers (used by the server layer; the engine itself never waits)
     TURN_SECONDS: 20,
     BOT_SECONDS: 3, // a computer player rolls after this pause (long enough for the last move to animate)
+    AWAY_SECONDS: 5, // a disconnected player's roll comes this fast (the game pauses if nobody is connected)
     BOT_NAME: 'كمبيوتر',
   };
 });

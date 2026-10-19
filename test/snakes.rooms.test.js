@@ -212,3 +212,65 @@ test('a player who reconnects gets the current board back', () => {
   assert.deepEqual(stateOf(back).positions, roomOf(L).engine.positions);
   assert.equal(stateOf(back).you, joined.you);
 });
+
+// ---------- lobby options, reactions, away players ----------
+
+test('set_options: the host\'s choices reach everyone in the lobby and are used at the start', () => {
+  const L = lobby(2);
+  assert.equal(L.others[0].last('room_state').options, null);
+  L.host.say({ type: 'set_options', options: { board: 'kids', finish: 'over', sixAgain: false, startSix: true } });
+  assert.deepEqual(L.others[0].last('room_state').options, { board: 'kids', finish: 'over', sixAgain: false, startSix: true });
+  assert.match(errOf(L.others[0].say({ type: 'set_options', options: { board: 'wild' } })), /للمضيف/);
+  assert.match(errOf(L.host.say({ type: 'set_options', options: { board: 'moon' } })), /غير صالحة/);
+  assert.equal(L.others[0].last('room_state').options.board, 'kids', 'a refused choice changes nothing');
+  L.host.say({ type: 'start_game' });
+  assert.deepEqual(stateOf(L.others[0]).options, { board: 'kids', finish: 'over', sixAgain: false, startSix: true });
+  assert.match(errOf(L.host.say({ type: 'set_options', options: {} })), /بدأت/);
+});
+
+test('react: everyone gets the emoji with the sender; unknown ones refused; too fast is dropped', () => {
+  const L = lobby(2);
+  L.others[0].say({ type: 'react', id: 'laugh' });
+  assert.deepEqual(L.host.last('reaction'), { type: 'reaction', from: L.others[0].last('joined').you, id: 'laugh' });
+  assert.match(errOf(L.host.say({ type: 'react', id: '<script>' })), /غير معروف/);
+  L.others[0].say({ type: 'react', id: 'snake' });
+  assert.equal(L.host.all('reaction').length, 1, 'a second emoji within the cooldown is dropped');
+  L.h.clock.advance(1000);
+  L.others[0].say({ type: 'react', id: 'snake' });
+  assert.equal(L.host.all('reaction').length, 2);
+});
+
+test('a player who is away is rolled for quickly; back again, the normal clock returns', () => {
+  const L = lobby(2);
+  L.host.say({ type: 'start_game', options: { sixAgain: false } });
+  const guest = L.others[0];
+  const gid = guest.last('joined').you;
+  const secret = guest.last('joined').playerId;
+  if (stateOf(L.host).currentPlayerId !== gid) L.host.say({ type: 'roll' });
+  assert.equal(stateOf(L.host).currentPlayerId, gid);
+  guest.drop();
+  assert.equal(stateOf(L.host).timer.kind, 'away');
+  L.h.clock.advance(C.AWAY_SECONDS * 1000);
+  assert.equal(L.host.events('roll').pop().playerId, gid);
+  L.host.say({ type: 'roll' });
+  assert.equal(stateOf(L.host).currentPlayerId, gid);
+  const back = L.h.conn().say({ type: 'join_room', code: L.code, playerId: secret });
+  assert.equal(stateOf(back).timer.kind, 'turn');
+  L.h.clock.advance(C.AWAY_SECONDS * 1000);
+  assert.equal(stateOf(back).currentPlayerId, gid, 'no quick roll once back');
+});
+
+test('with no human connected the game waits instead of playing itself', () => {
+  const L = lobby(1);
+  L.host.say({ type: 'add_bot' });
+  L.host.say({ type: 'start_game' });
+  const secret = L.host.last('joined').playerId;
+  const rolls = roomOf(L).engine.rollCount;
+  L.host.drop();
+  L.h.clock.advance(C.TURN_SECONDS * 1000 * 5);
+  assert.equal(roomOf(L).engine.rollCount, rolls);
+  const back = L.h.conn().say({ type: 'join_room', code: L.code, playerId: secret });
+  assert.ok(stateOf(back).timer, 'the clock runs again');
+  L.h.clock.advance(C.TURN_SECONDS * 1000);
+  assert.ok(roomOf(L).engine.rollCount > rolls);
+});

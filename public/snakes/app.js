@@ -43,7 +43,12 @@
     help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/>',
     list: '<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>',
     flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
+    smile: '<circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0M9 9.5h.01M15 9.5h.01"/>',
+    auto: '<path d="M4 12a8 8 0 0 1 13.7-5.6L20 8.7M20 4v4.7h-4.7M20 12a8 8 0 0 1-13.7 5.6L4 15.3M4 20v-4.7h4.7"/>',
   };
+
+  // quick reactions: ids come from the shared server config, the faces live here
+  const EMOJI = { laugh: '😂', wow: '😮', angry: '😡', cry: '😭', clap: '👏', pray: '🤲', fire: '🔥', snake: '🐍' };
   function icon(name, size) {
     const s = document.createElement('span');
     s.className = 'ico';
@@ -64,7 +69,14 @@
   function reduced() {
     return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   }
-  function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  // pauses between animations; a hidden tab skips them so it catches up at once
+  // a phone buzz, only once the player has touched the page (browsers refuse it before that)
+  function buzz(pattern) {
+    if (!navigator.vibrate) return;
+    if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
+    try { navigator.vibrate(pattern); } catch (e) { /* ignore */ }
+  }
+  function wait(ms) { return new Promise(function (r) { setTimeout(r, document.hidden ? 0 : ms); }); }
 
   const params = new URLSearchParams(location.search);
   let urlCode = (params.get('room') || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, SC.ROOM_CODE_LENGTH);
@@ -104,6 +116,9 @@
     timerEnd: null,
     rolled: false, // I pressed roll and wait for the server
     celebrated: false,
+    auto: store(GAME + '.auto') === true, // roll for me as soon as it is my turn
+    reacts: false, // the emoji row is open
+    optsSent: null, // room code my saved options were sent for (as host)
   };
 
   // ---------- network ----------
@@ -189,7 +204,15 @@
       case 'room_state':
         S.room = m;
         m.players.forEach(function (p) { S.names[p.id] = p.name; });
+        // a new host (or a new room) shares the choices remembered on this device
+        if (m.phase === 'lobby' && m.hostId === S.you && !m.options && S.optsSent !== m.code) {
+          S.optsSent = m.code;
+          sendRaw({ type: 'set_options', options: S.opts });
+        }
         break;
+      case 'reaction':
+        showReaction(m.from, m.id);
+        return;
       case 'game_state':
         onGameState(m);
         break;
@@ -218,7 +241,7 @@
     const prev = S.game;
     S.game = m;
     m.players.forEach(function (p) { S.names[p.id] = p.name; });
-    S.timerEnd = m.timer && m.timer.kind === 'turn' ? m.timer.endsAt - (m.timer.now - Date.now()) : null;
+    S.timerEnd = m.timer && (m.timer.kind === 'turn' || m.timer.kind === 'away') ? m.timer.endsAt - (m.timer.now - Date.now()) : null;
     if (!prev || prev.rollCount !== m.rollCount || prev.phase !== m.phase) S.rolled = false;
     if (m.phase !== 'gameOver') S.celebrated = false;
     const board = boardView();
@@ -231,7 +254,7 @@
       jobs(function () {
         if (!S.game || S.game.currentPlayerId !== S.you) return null;
         SND.play('turn');
-        if (navigator.vibrate) { try { navigator.vibrate(50); } catch (e) { /* ignore */ } }
+        buzz(50);
         return null;
       });
     }
@@ -361,9 +384,8 @@
           logLine(text);
           const up = e.type === 'ladder';
           SND.play(up ? 'ladder' : 'snake');
-          if (pace() === 1) announce(up ? 'درج!' : 'حية!', (isMe(e.playerId) ? 'أنت' : nm(e.playerId)) + ' ' + e.from + ' ← ' + e.to, up ? 'up' : 'down');
-          if (up && isMe(e.playerId) && navigator.vibrate) { try { navigator.vibrate([30, 40, 30]); } catch (err) { /* ignore */ } }
-          if (!up && isMe(e.playerId) && navigator.vibrate) { try { navigator.vibrate(180); } catch (err) { /* ignore */ } }
+          if (pace() === 1) announce(up ? 'درج!' : 'حية!', (isMe(e.playerId) ? 'أنت' : nm(e.playerId)) + ': من ' + e.from + ' إلى ' + e.to, up ? 'up' : 'down');
+          if (isMe(e.playerId)) buzz(up ? [30, 40, 30] : 180);
           render();
           const dist = Math.abs(e.to - e.from);
           return board.slide(e.playerId, e.type, e.from, e.to, (500 + dist * 12) * pace());
@@ -496,23 +518,27 @@
     return h('span', { class: 'sl-av tok-' + (p.token || 'red') + (cls ? ' ' + cls : '') }, p.bot ? icon('bot', 20) : (Array.from(p.name)[0] || '؟'));
   }
 
+  // the room's choices (everyone sees them); before the server has them, this device's saved ones
+  function roomOpts() { return (S.room && S.room.options) || S.opts; }
+
   function setOpt(k, v) {
+    S.opts = Object.assign({}, roomOpts());
     S.opts[k] = v;
     store(GAME + '.options', S.opts);
-    render();
+    send({ type: 'set_options', options: S.opts });
   }
 
   function choice(label, key, values, names, notes) {
     return h('div', { class: 'sl-opt' },
       h('div', { class: 'dim small' }, label),
       h('div', { class: 'sl-seg' }, values.map(function (v) {
-        return h('button', { 'aria-pressed': S.opts[key] === v ? 'true' : 'false', onclick: function () { setOpt(key, v); } },
+        return h('button', { 'aria-pressed': roomOpts()[key] === v ? 'true' : 'false', onclick: function () { setOpt(key, v); } },
           h('span', null, names[v]), notes && notes[v] ? h('small', null, notes[v]) : null);
       })));
   }
 
   function toggle(label, key, note) {
-    const on = S.opts[key];
+    const on = roomOpts()[key];
     return h('button', { class: 'sl-toggle', role: 'switch', 'aria-checked': on ? 'true' : 'false', onclick: function () { setOpt(key, !on); } },
       h('span', { class: 'txt' }, h('span', null, label), h('small', null, note)), h('span', { class: 'sw', 'aria-hidden': 'true' }));
   }
@@ -544,7 +570,7 @@
         h('button', { class: 'with-icon', onclick: function () { share(r.code); } }, icon('share', 20), 'مشاركة الرابط')),
       h('div', { class: 'dim' }, 'اللاعبون (' + r.players.length + '/' + C.MAX_PLAYERS + ')'),
       h('ul', { class: 'plist' }, r.players.map(function (p) {
-        return h('li', { class: p.connected ? '' : 'off' },
+        return h('li', { class: p.connected ? '' : 'off', 'data-chip': p.id },
           avatar(p),
           h('span', { class: 'pname' }, p.name + (p.id === S.you ? ' (أنت)' : ''), p.connected ? null : h('small', null, ' غير متصل')),
           p.isHost ? h('span', { class: 'tag' }, 'المضيف') : null,
@@ -568,11 +594,16 @@
         choice('اللوحة', 'board', C.BOARD_OPTIONS, boardNames(), boardNotes()),
         choice('الوصول إلى ' + C.SQUARES, 'finish', C.FINISH_OPTIONS, C.FINISH_NAMES),
         toggle('الستة تعطي رمية إضافية', 'sixAgain', 'وثلاث ستات متتالية ترجعك لمكانك'),
-        toggle('ابدأ بستة', 'startSix', 'لا تدخل اللوحة إلا إذا رميت 6')) : h('div', { class: 'sl-note' }, 'المضيف يختار اللوحة والقواعد.'),
+        toggle('ابدأ بستة', 'startSix', 'لا تدخل اللوحة إلا إذا رميت 6'))
+        : h('div', { class: 'sl-rules' }, h('b', null, 'قواعد الغرفة (يختارها المضيف)'), rulesText(roomOpts()).map(function (t) { return h('span', null, t); })),
+      h('div', { class: 'sl-lobbyrow' },
+        h('button', { class: 'with-icon', onclick: function () { S.sheet = 'help'; render(); } }, icon('help', 20), 'طريقة اللعب'),
+        reactButton()),
+      S.reacts ? reactRow() : null,
       h('div', { class: 'grow' }),
       amHost
         ? [present < C.MIN_PLAYERS ? h('div', { class: 'center dim' }, 'أرسل الرابط لأصدقائك أو أضف لاعب كمبيوتر.') : null,
-          h('button', { class: 'primary big', disabled: present < C.MIN_PLAYERS, onclick: function () { send({ type: 'start_game', options: S.opts }); } }, 'ابدأ')]
+          h('button', { class: 'primary big', disabled: present < C.MIN_PLAYERS, onclick: function () { send(r.options ? { type: 'start_game' } : { type: 'start_game', options: S.opts }); } }, 'ابدأ')]
         : h('div', { class: 'center dim' }, 'بانتظار المضيف ليبدأ اللعبة…'),
       h('a', { class: 'all-games', href: '/' }, 'كل الألعاب'));
   }
@@ -589,15 +620,52 @@
     if (send({ type: 'roll' })) { S.rolled = true; render(); }
   }
 
+  // auto roll: a short beat after my turn is ready, so the board can be seen first
+  let autoTimer = null;
+  function maybeAuto() {
+    if (!S.auto || autoTimer || !canRoll()) return;
+    autoTimer = setTimeout(function () { autoTimer = null; if (S.auto) roll(); }, 700);
+  }
+  function setAuto(on) {
+    S.auto = on;
+    store(GAME + '.auto', on);
+    toast(on ? 'الرمي التلقائي يعمل: النرد يُرمى عنك في دورك' : 'الرمي التلقائي متوقف', true);
+  }
+
+  // ---------- reactions ----------
+
+  function reactButton() {
+    return h('button', { class: 'icon-btn sl-reactbtn', 'aria-label': 'تفاعل', 'aria-expanded': S.reacts ? 'true' : 'false', onclick: function () { S.reacts = !S.reacts; render(); } }, icon('smile', 24));
+  }
+  function reactRow() {
+    return h('div', { class: 'sl-reacts', role: 'toolbar', 'aria-label': 'تفاعلات' }, SC.REACTIONS.map(function (id) {
+      return h('button', { 'aria-label': id, onclick: function () { S.reacts = false; send({ type: 'react', id: id }); } }, EMOJI[id] || '?');
+    }));
+  }
+  // the emoji floats up from the sender's name (their chip in the game, their row in the lobby)
+  function showReaction(from, id) {
+    if (!EMOJI[id]) return;
+    const anchor = document.querySelector('[data-chip="' + from + '"]');
+    const r = anchor ? anchor.getBoundingClientRect() : null;
+    const el = h('div', { class: 'sl-bubble', 'aria-hidden': 'true' }, h('span', null, EMOJI[id]), h('small', null, nm(from)));
+    el.style.left = (r && r.width ? r.left + r.width / 2 : window.innerWidth / 2) + 'px';
+    el.style.top = (r && r.width ? r.top : window.innerHeight / 2) + 'px';
+    document.body.append(el);
+    setTimeout(function () { el.remove(); }, 2300);
+  }
+
   function playersStrip(v) {
     const shown = boardView().shown();
     return h('div', { class: 'sl-players' }, v.players.map(function (p) {
       const pos = shown[p.id] !== undefined ? shown[p.id] : p.pos;
-      return h('div', { class: 'sl-chip' + (v.currentPlayerId === p.id ? ' turn' : '') + (p.connected ? '' : ' off') + (p.id === v.you ? ' me' : '') },
+      return h('button', {
+        class: 'sl-chip' + (v.currentPlayerId === p.id ? ' turn' : '') + (p.connected ? '' : ' off') + (p.id === v.you ? ' me' : ''),
+        'data-chip': p.id, 'aria-label': 'أين ' + p.name + '؟', onclick: function () { boardView().ping(p.id); },
+      },
         avatar(p, 'sm'),
         h('span', { class: 'txt' },
           h('span', { class: 'nm' }, p.name + (p.id === v.you ? ' (أنت)' : '')),
-          h('span', { class: 'pos' }, p.connected ? (pos ? 'مربع ' + pos : 'البداية') : 'غير متصل')));
+          h('span', { class: 'pos' }, (pos ? 'مربع ' + pos : 'البداية') + (p.connected ? '' : ' · غير متصل'))));
     }));
   }
 
@@ -619,8 +687,8 @@
 
     const top = h('header', { class: 'sl-top' },
       h('span', { class: 'brand' }, 'حية ودرج'),
-      h('span', { class: 'sl-timer' + (left !== null && left <= 5 ? ' low' : ''), id: 'sl-timer' },
-        left === null || !myTurn ? null : [icon('clock', 18), h('span', { class: 'num' }, '0:' + String(left).padStart(2, '0'))]),
+      h('span', { class: 'sl-timer' + (myTurn ? '' : ' other') + (myTurn && left !== null && left <= 5 ? ' low' : ''), id: 'sl-timer' },
+        left === null ? null : [icon('clock', 18), h('span', { class: 'num' }, '0:' + String(left).padStart(2, '0'))]),
       h('span', { class: 'sl-topbtns' },
         h('button', { class: 'icon-btn', 'aria-label': 'طريقة اللعب', onclick: function () { S.sheet = 'help'; render(); } }, icon('help')),
         h('button', { class: 'icon-btn', 'aria-label': 'القائمة', onclick: function () { S.sheet = 'menu'; render(); } }, icon('menu'))));
@@ -633,7 +701,11 @@
       h('div', { class: 'sl-diebox' }, die.el),
       h('div', { class: 'sl-dockmain' },
         h('div', { class: 'sl-status' + (myTurn ? ' mine' : '') }, statusLine(v)),
-        myTurn ? h('button', { class: 'primary big sl-roll', disabled: !canRoll(), onclick: roll }, S.rolled ? 'يرمي…' : 'ارمِ النرد') : null));
+        myTurn ? h('button', { class: 'primary big sl-roll', disabled: !canRoll(), onclick: roll }, S.rolled ? 'يرمي…' : S.auto ? 'يُرمى تلقائياً…' : 'ارمِ النرد') : null),
+      S.reacts ? reactRow() : null,
+      h('div', { class: 'sl-dockbtns' },
+        reactButton(),
+        h('button', { class: 'icon-btn sl-autobtn', 'aria-pressed': S.auto ? 'true' : 'false', 'aria-label': 'رمي تلقائي', title: 'رمي تلقائي', onclick: function () { setAuto(!S.auto); } }, icon('auto', 22))));
 
     return h('div', { class: 'sl-app' },
       top,
@@ -712,6 +784,8 @@
     return sheet('القائمة', h('div', { class: 'menu-list' },
       statsTable(v, v.ranking),
       h('div', { class: 'sl-rules' }, rulesText(v.options).map(function (t) { return h('span', null, t); })),
+      h('button', { class: 'with-icon', 'aria-pressed': S.auto ? 'true' : 'false', onclick: function () { setAuto(!S.auto); } },
+        icon('auto', 20), S.auto ? 'الرمي التلقائي يعمل - اضغط للإيقاف' : 'رمي تلقائي في دوري'),
       h('button', { class: 'with-icon', onclick: function () { S.sheet = 'log'; render(); } }, icon('list', 20), 'سجل الحركات'),
       h('button', { class: 'with-icon', onclick: function () { S.sheet = 'help'; render(); } }, icon('help', 20), 'طريقة اللعب'),
       h('button', { class: 'with-icon', onclick: function () { SND.setMuted(!muted); render(); } },
@@ -788,6 +862,7 @@
     overlays.forEach(function (o) { nodes.push(o); });
     if (S.toast) nodes.push(h('div', { class: 'toast' + (S.toast.ok ? ' ok' : ''), role: 'alert' }, S.toast.text));
     rootEl.replaceChildren.apply(rootEl, nodes);
+    maybeAuto();
   }
 
   setInterval(function () {
@@ -806,7 +881,7 @@
     if (document.visibilityState === 'visible' && (!ws || ws.readyState > 1)) connect();
   });
   document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape' && S.sheet) { closeSheet(); return; }
+    if (e.key === 'Escape' && (S.sheet || S.reacts)) { S.reacts = false; closeSheet(); return; }
     // space or enter rolls on my turn (not while typing or with a button focused)
     const tag = e.target && e.target.tagName;
     if ((e.key === ' ' || e.key === 'Enter') && !S.sheet && tag !== 'INPUT' && tag !== 'BUTTON' && canRoll()) { e.preventDefault(); roll(); }

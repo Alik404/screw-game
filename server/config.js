@@ -27,6 +27,8 @@
     MAX_ROOMS: 200, // protection: rooms kept in memory at once
     RATE_LIMIT_MESSAGES: 40, // protection: messages one connection may send ...
     RATE_LIMIT_WINDOW_SECONDS: 10, // ... in this window
+    REACTIONS: ['laugh', 'wow', 'angry', 'cry', 'clap', 'pray', 'fire', 'snake'], // quick emoji anyone can send
+    REACTION_COOLDOWN_MS: 800,
     DECK: {
       num: { 1: 4, 2: 4, 3: 4, 4: 4, 5: 4, 6: 4, 7: 4, 8: 4, 9: 4, 10: 4 },
       swap: 4, // خد وهات

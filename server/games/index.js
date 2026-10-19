@@ -178,6 +178,7 @@ const snakes = {
     const o = m && m.options && typeof m.options === 'object' ? m.options : {};
     return { board: o.board, finish: o.finish, sixAgain: o.sixAgain, startSix: o.startSix };
   },
+  checkOptions: function (o) { return SNAKES.readOptions(o) ? null : SNAKES.ERR.badOptions; },
   create: function (seats, options, extra) {
     const o = Object.assign({}, options);
     o.bots = extra && extra.bots;
@@ -195,10 +196,15 @@ const snakes = {
       return vp;
     });
   },
-  // one clock per roll (a six that rolls again restarts it); computer players get a short pause instead
-  timers: function (s) {
+  // One clock per roll (a six that rolls again restarts it). Computer players and players who are away
+  // get a short pause instead; with no human connected at all the game waits for someone to come back.
+  timers: function (s, roster) {
     if (s.phase !== 'turn') return [];
-    if (s.bots.indexOf(s.playerIds[s.current]) >= 0) return [{ kind: 'bot', key: 'bot:' + s.rollCount, seconds: SNAKES_CONFIG.BOT_SECONDS }];
+    const cur = s.playerIds[s.current];
+    if (roster && !roster.some(function (p) { return p.connected && !p.bot; })) return [];
+    if (s.bots.indexOf(cur) >= 0) return [{ kind: 'bot', key: 'bot:' + s.rollCount, seconds: SNAKES_CONFIG.BOT_SECONDS }];
+    const me = roster && roster.find(function (p) { return p.id === cur; });
+    if (me && !me.connected) return [{ kind: 'away', key: 'away:' + s.rollCount, seconds: SNAKES_CONFIG.AWAY_SECONDS }];
     return [{ kind: 'turn', key: 'turn:' + s.rollCount, seconds: SNAKES_CONFIG.TURN_SECONDS }];
   },
   timeout: function (s) { return SNAKES.autoPlay(s); },

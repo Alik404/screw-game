@@ -26,6 +26,8 @@ const MSG = {
   tokenTaken: 'هذا الرمز اختاره لاعب آخر.',
   noBots: 'هذه اللعبة لا تدعم لاعبي الكمبيوتر.',
   noBot: 'لاعب الكمبيوتر غير موجود.',
+  noOptions: 'هذه اللعبة ليس لها خيارات.',
+  badReaction: 'تفاعل غير معروف.',
 };
 
 function createRooms(opts) {
@@ -94,6 +96,7 @@ function createRooms(opts) {
       game: room.game,
       phase: started(room) ? 'playing' : 'lobby',
       players: roster(room),
+      options: room.options || null, // the host's choices so far (games with start options)
     };
   }
 
@@ -144,7 +147,8 @@ function createRooms(opts) {
   // Keep exactly the countdowns the game wants: same key = same running clock, new key = restart.
   function scheduleTimer(room) {
     if (room.dead || !room.engine) { clearGameTimer(room); return; }
-    const want = gameOf(room).timers(room.engine);
+    // the roster lets a game hurry the turn of someone who is away, or pause when nobody is here
+    const want = gameOf(room).timers(room.engine, roster(room));
     const wantKinds = {};
     want.forEach(function (w) { wantKinds[w.kind] = w; });
     Object.keys(room.timers).forEach(function (k) {
@@ -276,6 +280,7 @@ function createRooms(opts) {
         migrateHost(room);
         broadcastRoom(room);
         if (started(room)) {
+          scheduleTimer(room); // back from away: the normal turn clock again
           sendTo(conn, gameStateMsg(room, back));
           broadcastGame(room); // others see "connected" again
         }
@@ -340,6 +345,35 @@ function createRooms(opts) {
     broadcastRoom(room);
   };
 
+  // lobby only, host only: the host's choices, shown to everyone before the start
+  handlers.set_options = function (conn, m) {
+    const room = conn.room;
+    if (!room) return err(conn, MSG.notIn);
+    if (byConn(room, conn).seat !== room.hostSeat) return err(conn, MSG.hostOnly);
+    if (started(room)) return err(conn, MSG.alreadyStarted);
+    const g = gameOf(room);
+    if (!g.startOptions) return err(conn, MSG.noOptions);
+    const options = g.startOptions(m);
+    if (g.checkOptions) {
+      const e = g.checkOptions(options);
+      if (e) return err(conn, e);
+    }
+    room.options = options;
+    broadcastRoom(room);
+  };
+
+  // a quick emoji for everyone in the room (lobby or game), at most one per player per cooldown
+  handlers.react = function (conn, m) {
+    const room = conn.room;
+    if (!room) return err(conn, MSG.notIn);
+    if (CONFIG.REACTIONS.indexOf(m.id) < 0) return err(conn, MSG.badReaction);
+    const me = byConn(room, conn);
+    const t = now();
+    if (me.lastReact && t - me.lastReact < CONFIG.REACTION_COOLDOWN_MS) return; // too fast: silently dropped
+    me.lastReact = t;
+    broadcast(room, { type: 'reaction', from: me.seat, id: m.id });
+  };
+
   handlers.start_game = function (conn, m) {
     const room = conn.room;
     if (!room) return err(conn, MSG.notIn);
@@ -353,8 +387,10 @@ function createRooms(opts) {
     });
     if (room.players.length < gameOf(room).minPlayers) return err(conn, MSG.needPlayers);
     const game = gameOf(room);
-    // host options (e.g. number of rounds): the adapter picks only what it understands
-    const options = game.startOptions ? game.startOptions(m) : undefined;
+    // host options (e.g. number of rounds): the adapter picks only what it understands.
+    // Sent with start_game, or chosen earlier in the lobby with set_options.
+    let options;
+    if (game.startOptions) options = m.options === undefined && room.options ? room.options : game.startOptions(m);
     const bots = room.players.filter(function (p) { return p.bot; }).map(function (p) { return p.seat; });
     const g = game.create(room.players.map(function (p) { return p.seat; }), options, { bots: bots });
     if (g.error) return err(conn, g.error);
@@ -433,7 +469,10 @@ function createRooms(opts) {
     }
     touchIdle(room);
     broadcastRoom(room);
-    if (started(room)) broadcastGame(room);
+    if (started(room)) {
+      scheduleTimer(room); // a game may hurry or pause turns while someone is away
+      broadcastGame(room);
+    }
   }
 
   // Stop every timer (used on server shutdown and in tests).

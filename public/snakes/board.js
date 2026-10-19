@@ -210,7 +210,8 @@
           p = P[pl.id] = { g: g, t: t, x: center(0).x, y: center(0).y, s: 1, moving: false, seat: i };
         }
         p.seat = i;
-        p.g.setAttribute('class', 'sl-pc tok-' + (pl.token || C.COLORS[i % C.COLORS.length]) + (p.cur ? ' cur' : '') + (p.moving ? ' moving' : ''));
+        p.token = pl.token || C.COLORS[i % C.COLORS.length];
+        p.g.setAttribute('class', 'sl-pc tok-' + (pl.token || C.COLORS[i % C.COLORS.length]) + (p.cur ? ' cur' : '') + (p.moving ? ' moving' : '') + (p.g.classList.contains('ping') ? ' ping' : ''));
         p.t.textContent = Array.from(pl.name || '؟')[0];
         p.g.setAttribute('aria-label', pl.name || '');
       });
@@ -292,7 +293,28 @@
       shown[id] = sq;
       p.moving = false;
       p.g.classList.remove('moving');
+      flash(sq, p.token);
       return relayout();
+    }
+
+    // the square a piece just reached glows in its colour for a moment
+    function flash(sq, token) {
+      if (!sq || reduced()) return;
+      const c = center(sq);
+      const r = el('rect', { x: c.x - CELL / 2 + 3, y: c.y - CELL / 2 + 3, width: CELL - 6, height: CELL - 6, rx: 10, class: 'sl-flash tok-' + (token || 'red') }, marks);
+      setTimeout(function () { r.remove(); }, 1100);
+    }
+
+    // "where is my piece?": its ring pulses a few times
+    function ping(id) {
+      const p = P[id];
+      if (!p) return;
+      p.g.classList.remove('ping');
+      void p.g.getBoundingClientRect(); // restart the animation
+      p.g.classList.add('ping');
+      pieces.append(p.g);
+      clearTimeout(p.pingTimer);
+      p.pingTimer = setTimeout(function () { p.g.classList.remove('ping'); }, 1900);
     }
 
     // snap every piece to these squares (first view, reconnect, or after a burst of moves)
@@ -353,6 +375,7 @@
     api.slide = slide;
     api.leap = leap;
     api.shake = shake;
+    api.ping = ping;
     api.shown = function () { return Object.assign({}, shown); };
     return api;
   }

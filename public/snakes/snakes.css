@@ -7,6 +7,7 @@
 .sl-top .icon-btn { width: 40px; height: 40px; min-height: 40px; }
 .sl-timer { display: flex; align-items: center; gap: var(--s1); color: var(--brass); font-weight: 700; font-size: var(--fs-3); font-variant-numeric: tabular-nums; }
 .sl-timer.low { color: var(--red); }
+.sl-timer.other { color: var(--text-dim); font-size: var(--fs-2); font-weight: 500; }
 
 /* ---------- layout: phone = one column; wide screen = board + side panel ---------- */
 .sl-main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -18,7 +19,7 @@
 /* ---------- players ---------- */
 .sl-players { display: flex; gap: var(--s2); padding: var(--s2); overflow-x: auto; scrollbar-width: none; justify-content: safe center; }
 .sl-players::-webkit-scrollbar { display: none; }
-.sl-chip { flex: none; display: flex; align-items: center; gap: var(--s2); padding: 3px var(--s3) 3px 3px; border-radius: 999px; background: var(--table-deep); border: 2px solid transparent; transition: border-color .2s, background .2s; }
+.sl-chip { flex: none; display: flex; align-items: center; gap: var(--s2); padding: 3px var(--s3) 3px 3px; min-height: 0; min-width: 0; border-radius: 999px; background: var(--table-deep); border: 2px solid transparent; color: var(--text); text-align: start; font-weight: 400; transition: border-color .2s, background .2s; }
 .sl-chip.turn { border-color: var(--brass); background: color-mix(in srgb, var(--brass) 14%, var(--table-deep)); }
 .sl-chip.off { opacity: .55; }
 .sl-chip .txt { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
@@ -37,7 +38,7 @@
 
 /* ---------- dock: die, status, roll ---------- */
 .sl-line { font-size: var(--fs-1); color: var(--text-dim); text-align: center; min-height: 22px; padding: 0 var(--s3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sl-dock { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s3) calc(var(--s3) + env(safe-area-inset-bottom)); background: var(--table-deep); border-top: 2px solid transparent; transition: border-color .2s; }
+.sl-dock { position: relative; display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s3) calc(var(--s3) + env(safe-area-inset-bottom)); background: var(--table-deep); border-top: 2px solid transparent; transition: border-color .2s; }
 .sl-dock.turn { border-top-color: var(--brass); }
 .sl-dockmain { flex: 1; display: flex; flex-direction: column; gap: var(--s2); min-width: 0; min-height: 52px; justify-content: center; }
 .sl-status { text-align: center; color: var(--text-dim); font-size: var(--fs-2); }
@@ -74,7 +75,7 @@
 .sl-svg .sq.a.r3 { fill: var(--sl-row4); } .sl-svg .sq.a.r4 { fill: var(--sl-row5); }
 .sl-svg .sq.goal { fill: var(--brass); }
 .sl-svg .goal-star { fill: var(--paper); stroke: var(--wood); stroke-width: 3; stroke-linejoin: round; }
-.sl-svg .sq-n { font-family: var(--font); font-weight: 700; font-size: 25px; fill: var(--sl-num); opacity: .8; }
+.sl-svg .sq-n { font-family: var(--font); font-weight: 700; font-size: 30px; fill: var(--sl-num); opacity: .8; }
 .sl-svg .tray { fill: var(--wood-dark); }
 .sl-svg .tray-l { font-family: var(--font); font-weight: 700; font-size: 30px; fill: var(--board); text-anchor: end; opacity: .85; }
 
@@ -102,6 +103,9 @@
 .sl-pc .ring { fill: none; stroke: var(--paper); stroke-width: 5; opacity: 0; transform-box: fill-box; transform-origin: center; }
 .sl-pc.cur .ring { animation: sl-ring 1.4s ease-out infinite; }
 .sl-pc.moving .sh { opacity: .45; }
+.sl-pc.ping .ring { stroke: var(--brass); stroke-width: 7; animation: sl-ring .6s ease-out 3; }
+.sl-flash { fill: var(--pc); opacity: 0; pointer-events: none; animation: sl-flash 1s ease-out; }
+@keyframes sl-flash { 15% { opacity: .55; } 100% { opacity: 0; } }
 @keyframes sl-ring { from { opacity: .95; transform: scale(.75); } to { opacity: 0; transform: scale(1.3); } }
 
 /* recent moves: only on wide screens, where the side panel has room */
@@ -109,6 +113,23 @@
 .sl-feed li { padding: 3px 0; border-bottom: 1px solid var(--table); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sl-feed li:first-child { color: var(--text); font-weight: 700; }
 .sl-feed li:last-child { border-bottom: 0; }
+
+/* ---------- quick reactions and auto roll ---------- */
+.sl-dockbtns { display: flex; flex-direction: column; gap: var(--s1); flex: none; }
+.sl-dockbtns .icon-btn { width: 40px; height: 40px; min-height: 40px; border-radius: 50%; }
+.sl-autobtn[aria-pressed="true"] { color: var(--ink); background: var(--brass); }
+.sl-reactbtn[aria-expanded="true"] { color: var(--brass); }
+.sl-reacts { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; padding: var(--s1); background: var(--table-deep); border: 1.5px solid var(--table-glow); border-radius: var(--r-btn); animation: fade-in .15s; }
+.sl-dock .sl-reacts { position: absolute; bottom: calc(100% + var(--s2)); inset-inline: var(--s2); z-index: 6; box-shadow: var(--shadow); }
+.sl-reacts button { border: 0; min-width: 0; padding: 0; font-size: 24px; line-height: 1; border-radius: 50%; }
+.sl-reacts button:hover { background: var(--table); }
+.sl-bubble { position: fixed; z-index: 72; pointer-events: none; display: flex; flex-direction: column; align-items: center; transform: translate(-50%, 0); animation: sl-float 2.2s ease-out forwards; }
+.sl-bubble span { font-size: 44px; line-height: 1; filter: drop-shadow(0 4px 6px color-mix(in srgb, var(--ink) 60%, transparent)); }
+.sl-bubble small { font-size: var(--fs-1); font-weight: 700; color: var(--text); background: var(--table-deep); border-radius: 999px; padding: 0 var(--s2); margin-top: 2px; }
+@keyframes sl-float { 0% { transform: translate(-50%, 30px) scale(.4); opacity: 0; } 15% { transform: translate(-50%, 0) scale(1.15); opacity: 1; } 75% { opacity: 1; } 100% { transform: translate(-50%, -60px) scale(1); opacity: 0; } }
+.sl-lobbyrow { display: flex; gap: var(--s2); align-items: center; }
+.sl-lobbyrow > button.with-icon { flex: 1; }
+.sl-lobbyrow .sl-reactbtn { border: 1.5px solid var(--brass); border-radius: var(--r-btn); width: 48px; }
 
 /* ---------- announcements and confetti ---------- */
 .sl-announce {
@@ -178,12 +199,18 @@
 .sl-q { margin: 0; font-size: var(--fs-3); line-height: 1.5; }
 .help-list { margin: 0; padding-inline-start: var(--s4); display: flex; flex-direction: column; gap: var(--s3); line-height: 1.7; }
 
+/* tall phones: a bigger die in the dock */
+@media (max-width: 899px) and (min-height: 760px) {
+  .sl-dock .sl-die { --sz: 64px; }
+  .sl-diebox { width: 84px; height: 84px; }
+}
+
 /* ---------- wide screens: board on one side, players and die on the other (kept last so it wins) ---------- */
 @media (min-width: 900px) and (min-height: 560px) {
   .sl-app { max-width: 1180px; }
   .sl-main { flex-direction: row; gap: var(--s3); padding: var(--s3); }
   .sl-boardwrap { padding: 0; }
-  .sl-side { display: flex; flex-direction: column; gap: var(--s3); width: 320px; flex: none; min-height: 0; }
+  .sl-side { display: flex; flex-direction: column; gap: var(--s3); width: 350px; flex: none; min-height: 0; }
   .sl-players { order: 0; flex-direction: column; flex-wrap: nowrap; overflow-y: auto; padding: 0; flex: 1; min-height: 0; justify-content: flex-start; }
   .sl-chip { width: 100%; border-radius: var(--r-btn); padding: var(--s2) var(--s3); }
   .sl-chip .nm { max-width: none; }
