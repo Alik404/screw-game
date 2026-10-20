@@ -15,6 +15,7 @@
     asked: 'سألت هذا السؤال من قبل.',
     badChar: 'شخصية غير معروفة.',
     badOptions: 'خيارات اللعبة غير صالحة.',
+    picked: 'اخترت شخصيتك.',
   };
   const N = CONFIG.CHARACTERS.length; // every set has the same number of characters (a test checks it)
 
@@ -57,38 +58,59 @@
       target: o.target === undefined ? CONFIG.DEFAULT_TARGET : o.target,
       level: o.level === undefined ? CONFIG.DEFAULT_LEVEL : o.level,
       set: o.set === undefined ? CONFIG.DEFAULT_SET : o.set,
+      pick: o.pick === undefined ? CONFIG.DEFAULT_PICK : o.pick,
     };
+    if (CONFIG.PICKS.indexOf(out.pick) < 0) return null;
     if (CONFIG.SET_OPTIONS.indexOf(out.set) < 0) return null;
     if (CONFIG.TARGETS.indexOf(out.target) < 0 || CONFIG.LEVELS.indexOf(out.level) < 0) return null;
     return out;
   }
 
+  // a random character for id: not the other player's, and not one id already had this match
+  function drawFor(s, id, r) {
+    s.used[id] = s.used[id] || [];
+    const taken = Object.keys(s.secrets).filter(function (k) { return k !== id && s.secrets[k] !== null; }).map(function (k) { return s.secrets[k]; });
+    let pool = [];
+    for (let i = 0; i < N; i++) if (s.used[id].indexOf(i) < 0 && taken.indexOf(i) < 0) pool.push(i);
+    if (!pool.length) { s.used[id] = []; for (let i = 0; i < N; i++) if (taken.indexOf(i) < 0) pool.push(i); }
+    const pick = pool[Math.floor(r() * pool.length)];
+    s.secrets[id] = pick;
+    s.used[id].push(pick);
+  }
+
+  function beginPlay(ctx) {
+    const s = ctx.s;
+    s.phase = 'turn';
+    s.stage = 'ask';
+    ctx.events.push({ type: 'picks_done', firstPlayerId: curId(s) });
+  }
+
   function startRound(ctx) {
     const s = ctx.s;
     const r = randOf(s);
-    // two different characters, and nobody gets the same one twice in a match
     s.used = s.used || {};
     s.secrets = {};
-    s.playerIds.forEach(function (id) {
-      s.used[id] = s.used[id] || [];
-      const taken = Object.keys(s.secrets).map(function (k) { return s.secrets[k]; });
-      let pool = [];
-      for (let i = 0; i < N; i++) if (s.used[id].indexOf(i) < 0 && taken.indexOf(i) < 0) pool.push(i);
-      if (!pool.length) { s.used[id] = []; for (let i = 0; i < N; i++) if (taken.indexOf(i) < 0) pool.push(i); }
-      const pick = pool[Math.floor(r() * pool.length)];
-      s.secrets[id] = pick;
-      s.used[id].push(pick);
-    });
+    s.playerIds.forEach(function (id) { s.secrets[id] = null; });
     s.down = {};
     s.playerIds.forEach(function (id) { s.down[id] = []; });
     s.asked = [];
-    s.phase = 'turn';
-    s.stage = 'ask';
     s.current = s.round === 1 ? Math.floor(r() * 2) : 1 - s.starter;
     s.starter = s.current;
     s.turnCount = 0;
     s.result = null;
-    ctx.events.push({ type: 'round_start', round: s.round, firstPlayerId: curId(s) });
+    ctx.events.push({ type: 'round_start', round: s.round, firstPlayerId: curId(s), pick: s.options.pick });
+    if (s.options.pick === 'random') {
+      // the draw: two different characters, nobody gets the same one twice in a match
+      s.playerIds.forEach(function (id) { drawFor(s, id, r); });
+      s.phase = 'turn';
+      s.stage = 'ask';
+      return;
+    }
+    // each player chooses; a computer player chooses at once
+    s.phase = 'pick';
+    s.stage = null;
+    s.bots.forEach(function (id) { drawFor(s, id, r); ctx.events.push({ type: 'pick', playerId: id }); });
+    if (s.playerIds.every(function (id) { return s.secrets[id] !== null; })) beginPlay(ctx);
   }
 
   function createGame(playerIds, opts) {
@@ -148,6 +170,22 @@
     if (stage && s.stage !== stage) return ERR.wrongStage;
     return null;
   }
+
+  // choose my secret character (the other player only learns that I have chosen)
+  H.pick = function (ctx, pid, a) {
+    const s = ctx.s;
+    if (s.phase !== 'pick') return ERR.wrongStage;
+    if (s.secrets[pid] !== null) return ERR.picked;
+    if (a.random) { drawFor(s, pid, randOf(s)); } else {
+      if (typeof a.char !== 'number' || a.char < 0 || a.char >= N || a.char !== Math.floor(a.char)) return ERR.badChar;
+      s.secrets[pid] = a.char;
+      s.used[pid] = s.used[pid] || [];
+      s.used[pid].push(a.char);
+    }
+    s.seq += 1;
+    ctx.events.push({ type: 'pick', playerId: pid });
+    if (s.playerIds.every(function (id) { return s.secrets[id] !== null; })) beginPlay(ctx);
+  };
 
   H.ask = function (ctx, pid, a) {
     const s = ctx.s;
@@ -268,6 +306,17 @@
     });
   }
 
+  // the time to choose ran out: a random character for whoever has not chosen
+  function autoPick(state) {
+    if (state.phase !== 'pick') return { error: ERR.wrongStage };
+    return run(state, function (ctx) {
+      const s = ctx.s;
+      const r = randOf(s);
+      s.playerIds.forEach(function (id) { if (s.secrets[id] === null) { drawFor(s, id, r); ctx.events.push({ type: 'pick', playerId: id, auto: true }); } });
+      beginPlay(ctx);
+    });
+  }
+
   function nextRound(state) {
     if (state.phase !== 'roundOver') return { error: ERR.wrongStage };
     return run(state, function (ctx) { return H.next_round(ctx); });
@@ -296,7 +345,7 @@
       stage: s.phase === 'turn' ? s.stage : null,
       currentPlayerId: s.phase === 'turn' ? curId(s) : null,
       playerIds: s.playerIds.slice(),
-      players: s.playerIds.map(function (id) { return { id: id, bot: s.bots.indexOf(id) >= 0, down: s.down[id].length }; }),
+      players: s.playerIds.map(function (id) { return { id: id, bot: s.bots.indexOf(id) >= 0, down: s.down[id].length, picked: s.secrets[id] !== null }; }),
       options: clone(s.options),
       secret: s.secrets[playerId],
       down: s.down[playerId].slice(),
@@ -313,5 +362,5 @@
     };
   }
 
-  return { ERR, createGame, act, autoPlay, nextRound, endGameEarly, viewFor, readOptions, candidates, matches, question };
+  return { ERR, createGame, act, autoPlay, autoPick, nextRound, endGameEarly, viewFor, readOptions, candidates, matches, question };
 });

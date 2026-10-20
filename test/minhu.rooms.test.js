@@ -85,6 +85,31 @@ test('asking through the protocol; questions and answers are seen by both', () =
   assert.match(errOf(cur.say({ type: 'guess', char: 3 })), /ليس دورك/);
 });
 
+test('choosing through the protocol: picks stay secret, the round starts when both have chosen', () => {
+  const L = lobby(2);
+  L.host.say({ type: 'set_options', options: { pick: 'choose' } });
+  L.host.say({ type: 'start_game' });
+  assert.equal(stateOf(L.host).phase, 'pick');
+  assert.equal(stateOf(L.host).timer.kind, 'pick');
+  L.host.say({ type: 'pick', char: 5 });
+  const g = L.others[0];
+  assert.ok(!JSON.stringify(g.inbox).includes('"char":5'), 'the guest never sees the host\'s choice');
+  assert.equal(stateOf(g).players.find((p) => p.isHost).picked, true);
+  g.say({ type: 'pick', random: true });
+  assert.equal(stateOf(L.host).phase, 'turn');
+  assert.equal(stateOf(L.host).secret, 5);
+});
+
+test('choosing: if a player does not choose, the clock does it', () => {
+  const L = lobby(1);
+  L.host.say({ type: 'add_bot' });
+  L.host.say({ type: 'start_game', options: { pick: 'choose' } });
+  assert.equal(stateOf(L.host).phase, 'pick');
+  L.h.clock.advance(C.PICK_SECONDS * 1000);
+  assert.equal(stateOf(L.host).phase, 'turn');
+  assert.ok(stateOf(L.host).secret !== null);
+});
+
 test('against the computer: rounds deal themselves, the match ends', () => {
   const L = lobby(1);
   L.host.say({ type: 'add_bot' });

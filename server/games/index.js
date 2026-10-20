@@ -392,13 +392,13 @@ const minhu = {
   id: 'minhu',
   minPlayers: MINHU_CONFIG.MIN_PLAYERS,
   maxPlayers: MINHU_CONFIG.MAX_PLAYERS,
-  actions: ['ask', 'flip', 'end_turn', 'guess'],
-  fields: ['type', 'q', 'ids', 'char'],
+  actions: ['pick', 'ask', 'flip', 'end_turn', 'guess'],
+  fields: ['type', 'q', 'ids', 'char', 'random'],
   bots: true,
   botName: MINHU_CONFIG.BOT_NAME,
   startOptions: function (m) {
     const o = m && m.options && typeof m.options === 'object' ? m.options : {};
-    return { target: o.target, level: o.level, set: o.set };
+    return { target: o.target, level: o.level, set: o.set, pick: o.pick };
   },
   checkOptions: function (o) { return MINHU.readOptions(o) ? null : MINHU.ERR.badOptions; },
   create: function (seats, options, extra) {
@@ -419,13 +419,17 @@ const minhu = {
   },
   // one clock per turn (asking, then flipping, share it); the next round deals itself
   timers: function (s, roster) {
+    if (s.phase === 'pick') {
+      if (roster && !roster.some(function (p) { return p.connected && !p.bot; })) return [];
+      return [{ kind: 'pick', key: 'pick:' + s.round, seconds: MINHU_CONFIG.PICK_SECONDS }];
+    }
     if (s.phase === 'turn') return playerClock(roster, s.bots, s.playerIds[s.current], s.round + ':' + s.turnCount + (s.bots.indexOf(s.playerIds[s.current]) >= 0 ? s.stage : ''), MINHU_CONFIG);
     if (s.phase === 'roundOver' && (!roster || roster.some(function (p) { return p.connected && !p.bot; }))) {
       return [{ kind: 'next', key: 'next:' + s.round, seconds: MINHU_CONFIG.NEXT_ROUND_SECONDS }];
     }
     return [];
   },
-  timeout: function (s, kind) { return kind === 'next' ? MINHU.nextRound(s) : MINHU.autoPlay(s); },
+  timeout: function (s, kind) { return kind === 'next' ? MINHU.nextRound(s) : kind === 'pick' ? MINHU.autoPick(s) : MINHU.autoPlay(s); },
   messageFor: function (ev) { return { type: 'event', event: ev }; },
   host: {
     next_round: function (s) { return MINHU.nextRound(s); },

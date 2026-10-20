@@ -106,6 +106,41 @@ test('guessing: right wins the round, wrong loses it; the match ends at the targ
   assert.equal(E.act(r.state, p, { type: 'ask', q: 'male' }).error, E.ERR.gameOver);
 });
 
+test('choosing: each player picks a secret (the other only sees that it is done); then the round starts', () => {
+  let s = game({ pick: 'choose' });
+  assert.equal(s.phase, 'pick');
+  assert.deepEqual(s.secrets, { a: null, b: null });
+  assert.equal(E.act(s, 'a', { type: 'ask', q: 'male' }).error, E.ERR.wrongStage);
+  assert.equal(E.act(s, 'a', { type: 'pick', char: 99 }).error, E.ERR.badChar);
+  let r = E.act(s, 'a', { type: 'pick', char: 7 });
+  assert.deepEqual(r.events, [{ type: 'pick', playerId: 'a' }]);
+  s = r.state;
+  assert.equal(E.act(s, 'a', { type: 'pick', char: 3 }).error, E.ERR.picked);
+  const vb = E.viewFor(s, 'b');
+  assert.equal(vb.secret, null);
+  assert.equal(vb.players.find((p) => p.id === 'a').picked, true);
+  assert.ok(!JSON.stringify(vb).includes('"secrets"'));
+  r = E.act(s, 'b', { type: 'pick', random: true });
+  assert.deepEqual(r.events.map((e) => e.type), ['pick', 'picks_done']);
+  assert.equal(r.state.phase, 'turn');
+  assert.equal(r.state.secrets.a, 7);
+  assert.ok(r.state.secrets.b !== null && r.state.secrets.b !== 7);
+  assert.equal(E.viewFor(r.state, 'a').secret, 7);
+});
+
+test('choosing: a computer player picks at once; the clock picks for a slow player', () => {
+  const s = E.createGame(['a', 'b'], { seed: 3, pick: 'choose', bots: ['b'] }).state;
+  assert.equal(s.phase, 'pick');
+  assert.notEqual(s.secrets.b, null);
+  const r = E.autoPick(s);
+  assert.equal(r.state.phase, 'turn');
+  assert.notEqual(r.state.secrets.a, null);
+  assert.equal(r.events[0].auto, true);
+  assert.equal(E.createGame(['a', 'b'], { pick: 'mind' }).error, E.ERR.badOptions);
+  const both = E.createGame(['x', 'y'], { seed: 1, pick: 'choose', bots: ['x', 'y'] }).state;
+  assert.equal(both.phase, 'turn', 'two computer players start right away');
+});
+
 test('nobody gets the same character twice in a match', () => {
   for (let seed = 1; seed <= 30; seed++) {
     let s = E.createGame(['a', 'b'], { seed, target: 3 }).state;

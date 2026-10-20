@@ -205,6 +205,12 @@
     SETS: SETS, // the boards to choose from in the lobby
     SET_OPTIONS: ['people', 'animals', 'monsters', 'robots'],
     DEFAULT_SET: 'people',
+    // who chooses the secret characters: each player for themselves, or the draw
+    PICKS: ['choose', 'random'],
+    PICK_NAMES: { choose: 'كل لاعب يختار', random: 'بالقرعة' },
+    DEFAULT_PICK: 'random', // the engine's default; the lobby suggests 'choose'
+    LOBBY_PICK: 'choose',
+    PICK_SECONDS: 30, // then a random one is chosen for whoever has not picked
     TARGETS: [1, 2, 3], // rounds needed to win the match
     DEFAULT_TARGET: 2,
     LEVELS: ['easy', 'smart'],

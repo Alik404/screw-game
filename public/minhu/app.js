@@ -80,7 +80,7 @@
   const pageStart = Date.now();
   function savedOptions() {
     const o = store(GAME + '.options') || {};
-    return { target: C.TARGETS.indexOf(o.target) >= 0 ? o.target : C.DEFAULT_TARGET, level: C.LEVELS.indexOf(o.level) >= 0 ? o.level : C.DEFAULT_LEVEL, set: C.SET_OPTIONS.indexOf(o.set) >= 0 ? o.set : C.DEFAULT_SET };
+    return { target: C.TARGETS.indexOf(o.target) >= 0 ? o.target : C.DEFAULT_TARGET, level: C.LEVELS.indexOf(o.level) >= 0 ? o.level : C.DEFAULT_LEVEL, set: C.SET_OPTIONS.indexOf(o.set) >= 0 ? o.set : C.DEFAULT_SET, pick: C.PICKS.indexOf(o.pick) >= 0 ? o.pick : C.LOBBY_PICK };
   }
 
   const S = {
@@ -150,7 +150,7 @@
     m.players.forEach(function (p) { S.names[p.id] = p.name; });
     const t = m.timer;
     const at = function (x) { return x.endsAt - (x.now - Date.now()); };
-    S.timerEnd = t && (t.kind === 'turn' || t.kind === 'away') ? at(t) : null;
+    S.timerEnd = t && (t.kind === 'turn' || t.kind === 'away' || t.kind === 'pick') ? at(t) : null;
     S.nextEnd = t && t.kind === 'next' ? at(t) : null;
     if (!prev || prev.seq !== m.seq) S.sent = false;
     // my board: take the server's unless I am in the middle of flipping
@@ -223,8 +223,22 @@
     switch (e.type) {
       case 'round_start':
         sfx('deal');
-        announce('الجولة ' + e.round, isMe(e.firstPlayerId) ? 'أنت تبدأ' : 'يبدأ ' + nm(e.firstPlayerId), 'start');
-        speak('الجولة ' + e.round + '. ' + (isMe(e.firstPlayerId) ? 'أنت تبدأ' : 'يبدأ ' + nm(e.firstPlayerId)));
+        if (e.pick === 'choose') {
+          announce('الجولة ' + e.round, 'اختار شخصيتك', 'start');
+          speak('الجولة ' + e.round + '. اختار شخصيتك السرية');
+        } else {
+          announce('الجولة ' + e.round, isMe(e.firstPlayerId) ? 'أنت تبدأ' : 'يبدأ ' + nm(e.firstPlayerId), 'start');
+          speak('الجولة ' + e.round + '. ' + (isMe(e.firstPlayerId) ? 'أنت تبدأ' : 'يبدأ ' + nm(e.firstPlayerId)));
+        }
+        break;
+      case 'pick':
+        if (!isMe(e.playerId)) sfx('flip');
+        else if (e.auto) toast('خلص الوقت، فاخترنا لك شخصية.', true);
+        break;
+      case 'picks_done':
+        sfx('turn');
+        announce('يلا نبدي!', isMe(e.firstPlayerId) ? 'أنت تبدأ' : 'يبدأ ' + nm(e.firstPlayerId), 'start');
+        speak('يلا نبدي. ' + (isMe(e.firstPlayerId) ? 'أنت تبدأ' : 'يبدأ ' + nm(e.firstPlayerId)));
         break;
       case 'ask': {
         const q = question(e.q);
@@ -270,6 +284,10 @@
   }
   function toggle(i) {
     const v = S.game;
+    if (v && v.phase === 'pick') {
+      if (v.secret === null && !S.sent) { S.pickChoice = i; S.sheet = 'pick'; sfx('flip'); render(); }
+      return;
+    }
     if (!v || v.phase !== 'turn') return;
     if (S.guessMode) { S.guessPick = i; S.sheet = 'guess'; render(); return; }
     const d = S.down.slice();
@@ -388,8 +406,9 @@
       setPicker(amHost),
       amHost ? h('div', { class: 'mh-opts' },
         seg('المباراة', 'target', C.TARGETS, { 1: 'جولة وحدة', 2: 'أفضل من 3', 3: 'أفضل من 5' }, { 1: 'سريعة', 2: 'تفوز بجولتين', 3: 'تفوز بثلاث' }),
+        seg('اختيار الشخصية', 'pick', C.PICKS, C.PICK_NAMES, { choose: 'تختارها بنفسك', random: 'الخادم يوزّع' }),
         seg('الكمبيوتر', 'level', C.LEVELS, C.LEVEL_NAMES, { easy: 'يخمّن بسرعة', smart: 'يسأل أذكى سؤال' }))
-        : h('div', { class: 'mh-rules' }, h('b', null, 'المباراة'), h('span', null, 'الفوز بـ ' + o.target + (o.target === 1 ? ' جولة' : ' جولات'))),
+        : h('div', { class: 'mh-rules' }, h('b', null, 'المباراة'), h('span', null, 'الفوز بـ ' + o.target + (o.target === 1 ? ' جولة' : ' جولات')), h('span', null, 'الشخصية: ' + C.PICK_NAMES[o.pick || C.DEFAULT_PICK])),
       h('div', { class: 'mh-lobbyrow' }, h('button', { class: 'with-icon', onclick: function () { S.sheet = 'help'; render(); } }, icon('help', 20), 'طريقة اللعب'), reactButton('boxed')),
       S.reacts ? reactRow() : null,
       h('div', { class: 'grow' }),
@@ -409,6 +428,14 @@
   function actionPanel(v) {
     const myTurn = v.phase === 'turn' && v.currentPlayerId === v.you;
     const opp = other(v);
+    if (v.phase === 'pick') {
+      if (v.secret === null && !S.sent) {
+        return h('div', { class: 'mh-panel' }, h('div', { class: 'mh-instr' }, 'اختار شخصيتك السرية: اضغط وجه من اللوحة'),
+          h('div', { class: 'btns' }, h('button', { class: 'with-icon arc-flip', onclick: function () { if (send({ type: 'pick', random: true })) S.sent = true; } }, icon('target', 20), 'عشوائي')));
+      }
+      const oppP = v.players.find(function (p) { return p.id === opp; });
+      return h('div', { class: 'mh-panel' }, h('div', { class: 'mh-wait' }, oppP.picked ? '…' : 'بانتظار ' + nm(opp) + ' يختار شخصيته…'));
+    }
     if (v.phase !== 'turn') return h('div', { class: 'mh-panel' }, h('div', { class: 'mh-wait' }, '…'));
     if (!myTurn) {
       const la = v.stage === 'flip' ? lastAnswer(v, opp) : null;
@@ -439,6 +466,10 @@
   // what the screen says when it is not flashing an answer
   function lcdStatus(v) {
     const opp = other(v);
+    if (v.phase === 'pick') {
+      const oppPicked = v.players.find(function (p) { return p.id === opp; }).picked;
+      return v.secret === null ? 'اختار شخصيتك السرية' + (oppPicked ? ' · ' + nm(opp) + ' اختار ✓' : '') : 'بانتظار ' + nm(opp) + ' يختار…';
+    }
     if (v.phase !== 'turn') return 'انتهت الجولة';
     if (v.currentPlayerId === v.you) {
       if (v.stage === 'flip') { const la = lastAnswer(v, v.you); return question(la.q).text + ' ← ' + (la.yes ? 'نعم' : 'لا') + ' · اقلب وتم'; }
@@ -467,7 +498,7 @@
     const lcd = h('div', { class: 'mh-lcd' + (flash ? ' flash ' + flash.cls : ''), 'aria-live': 'polite', 'data-seat': opp },
       h('div', { class: 'row' },
         h('span', null, oppP.name + (oppP.connected ? '' : ' (غير متصل)') + ' · باقي ' + (N - oppP.down)),
-        h('span', { class: 'digits', id: 'mh-timer' }, left === null || v.phase !== 'turn' ? '-:--' : h('span', { class: 'num' }, Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0')))),
+        h('span', { class: 'digits', id: 'mh-timer' }, left === null || (v.phase !== 'turn' && v.phase !== 'pick') ? '-:--' : h('span', { class: 'num' }, Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0')))),
       flash ? h('div', { class: 'main' }, h('div', { class: 'q' }, flash.q), h('div', { class: 'a' }, flash.a)) : h('div', { class: 'main' }, h('div', { class: 'q' }, lcdStatus(v))),
       h('div', { class: 'row' }, h('span', null, 'أنت ' + v.scores[v.you] + ' – ' + v.scores[opp] + ' ' + oppP.name), h('span', null, 'الجولة ' + v.round)));
     const board = h('div', { class: 'mh-board' + (S.guessMode ? ' guessing' : '') }, CH().map(function (c, i) {
@@ -476,7 +507,7 @@
     }));
     const deck = h('div', { class: 'mh-deck' + (myTurn ? ' turn' : ''), 'data-seat': v.you },
       h('button', { class: 'mh-secret', 'aria-label': 'شخصيتك', onclick: function () { S.sheet = 'secret'; render(); } },
-        h('span', { class: 'window' }, faceCard(v.secret, { tag: 'div', cls: 'mini' })), h('span', { class: 'lbl' }, 'شخصيتك', h('b', null, CH()[v.secret].name))),
+        h('span', { class: 'window' }, secretMini(v)), h('span', { class: 'lbl' }, 'شخصيتك', h('b', null, v.secret === null ? '؟' : CH()[v.secret].name))),
       actionPanel(v),
       reactButton());
     return h('div', { class: 'mh-app mh-elec seat-' + v.playerIds.indexOf(v.you) },
@@ -495,7 +526,7 @@
       h('span', { class: 'brand' }, 'منو هو؟'),
       h('span', { class: 'mh-score' }, h('b', null, v.scores[v.you] + ' – ' + v.scores[opp]), ' · الجولة ' + v.round),
       h('span', { class: 'mh-timer' + (myTurn ? '' : ' other') + (myTurn && left !== null && left <= 10 ? ' low' : ''), id: 'mh-timer' },
-        left === null || v.phase !== 'turn' ? null : [icon('clock', 18), h('span', { class: 'num' }, Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0'))]),
+        left === null || (v.phase !== 'turn' && v.phase !== 'pick') ? null : [icon('clock', 18), h('span', { class: 'num' }, Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0'))]),
       h('span', { class: 'mh-topbtns' },
         h('button', { class: 'icon-btn', 'aria-label': 'الأسئلة', onclick: function () { S.sheet = 'log'; render(); } }, icon('list')),
         h('button', { class: 'icon-btn', 'aria-label': 'القائمة', onclick: function () { S.sheet = 'menu'; render(); } }, icon('menu'))));
@@ -511,7 +542,7 @@
     }));
     const mine = h('div', { class: 'mh-me' + (myTurn ? ' turn' : ''), 'data-seat': v.you },
       h('button', { class: 'mh-secret', 'aria-label': 'شخصيتك', onclick: function () { S.sheet = 'secret'; render(); } },
-        faceCard(v.secret, { tag: 'div', cls: 'mini' }), h('span', { class: 'lbl' }, 'شخصيتك', h('b', null, CH()[v.secret].name))),
+        secretMini(v), h('span', { class: 'lbl' }, 'شخصيتك', h('b', null, v.secret === null ? '؟' : CH()[v.secret].name))),
       actionPanel(v),
       reactButton());
     return h('div', { class: 'mh-app' }, top, oppStrip, h('div', { class: 'mh-boardwrap' }, board), S.reacts ? h('div', { class: 'mh-reactwrap' }, reactRow()) : null, mine);
@@ -598,8 +629,24 @@
         h('button', { onclick: function () { S.sheet = null; render(); } }, 'رجوع'))), closeSheet);
   }
 
+  function secretMini(v) {
+    return v.secret === null ? faceCard(0, { tag: 'div', cls: 'mini', down: true }) : faceCard(v.secret, { tag: 'div', cls: 'mini' });
+  }
+
+  // confirm my choice of secret character
+  function pickSheet() {
+    const i = S.pickChoice;
+    return sheet('هذي شخصيتك؟', h('div', { class: 'menu-list mh-guess' },
+      faceCard(i, { tag: 'div', cls: 'big' }),
+      h('p', { class: 'center' }, 'تختار ', h('b', null, CH()[i].name), ' شخصيتك السرية؟ خصمك لازم يخمّنها.'),
+      h('div', { class: 'btns' },
+        h('button', { class: 'primary big', onclick: function () { S.sheet = null; if (send({ type: 'pick', char: i })) { S.sent = true; sfx('ladder'); } } }, 'إي، أختارها'),
+        h('button', { onclick: function () { S.sheet = null; render(); } }, 'رجوع'))), closeSheet);
+  }
+
   function secretSheet() {
     const v = S.game;
+    if (v.secret === null) { S.sheet = null; return null; }
     const c = CH()[v.secret];
     return sheet('شخصيتك السرية', h('div', { class: 'menu-list mh-guess' }, faceCard(v.secret, { tag: 'div', cls: 'big' }),
       h('p', { class: 'center dim' }, 'خصمك يحاول يعرف إنها ', h('b', null, c.name), '. الخادم يجاوب أسئلته عنها بالصدق.')), closeSheet);
@@ -661,9 +708,10 @@
       if (!S.hideResult) overlays.push(resultSheet());
       else screen.append(h('div', { class: 'mh-showres' }, h('button', { class: 'primary', onclick: function () { S.hideResult = false; render(); } }, 'عرض النتيجة')));
     }
+    if (v && v.phase === 'pick' && S.sheet === 'pick' && v.secret === null) overlays.push(pickSheet());
     if (v && v.phase === 'turn' && S.sheet === 'ask') overlays.push(askSheet());
     if (v && v.phase === 'turn' && S.sheet === 'guess') overlays.push(guessSheet());
-    if (v && S.sheet === 'secret') overlays.push(secretSheet());
+    if (v && S.sheet === 'secret') { const ss = secretSheet(); if (ss) overlays.push(ss); }
     if (v && S.sheet === 'log') overlays.push(logSheet());
     if (v && S.sheet === 'menu') overlays.push(menuSheet());
     if (S.sheet === 'help') overlays.push(helpSheet());
