@@ -241,6 +241,12 @@
   --mh-rob-glow: #5ff2ff;
   --mh-rob-patch: #f2c6a0;
 
+  /* home page: the night around the table, the lamp over it, the gold of the title */
+  --lp-night: #051417;
+  --lp-lamp: #2c7883;
+  --lp-gold-hi: #ffeab0;
+  --lp-gold-lo: #a06c1c;
+
   /* spacing scale: multiples of 4px */
   --s1: 4px;
   --s2: 8px;

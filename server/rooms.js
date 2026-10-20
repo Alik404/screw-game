@@ -546,7 +546,15 @@ function createRooms(opts) {
     Array.from(rooms.values()).forEach(destroy);
   }
 
-  return { handle, close, rooms, shutdown };
+  // which game a code belongs to, for the home page's "I have a code" box (nobody joins anything)
+  function lookup(code) {
+    const room = rooms.get(code);
+    if (room) return { game: room.game };
+    forgetOldClosed();
+    return closedRooms.has(code) ? { closed: true } : null;
+  }
+
+  return { handle, close, rooms, shutdown, lookup };
 }
 
 module.exports = { createRooms };

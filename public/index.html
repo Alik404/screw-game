@@ -3,7 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0b2529">
+<meta name="theme-color" content="#051417">
+<meta name="description" content="ثماني ألعاب أونلاين للأصدقاء بالعربي: سكرو، سبعة وسبعة، بنك الحظ، حية ودرج، دومنو، طاولي، لقطة! ومنو هو؟ أنشئ غرفة، دز الرابط، والعبوا سوا من الجوال. مجاناً وبلا تنزيل.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="ألعاب الأصدقاء">
+<meta property="og:description" content="لمّة الربع صارت أونلاين: ثماني ألعاب تنلعب ويا ربعك أو ضد الكمبيوتر. مجاناً وبلا تنزيل.">
+<meta property="og:image" content="/icons/icon-512.png">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
 <link rel="icon" href="/icons/icon-192.png" type="image/png" sizes="192x192">
@@ -12,7 +17,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="ألعاب">
-<title>ألعاب الأصدقاء</title>
+<title>ألعاب الأصدقاء · العبوا سوا أونلاين</title>
+<link rel="preload" href="/fonts/lalezar-arabic-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/tokens.css">
 <link rel="stylesheet" href="/cards.css">
 <link rel="stylesheet" href="/style.css">
@@ -20,294 +26,290 @@
 <link rel="stylesheet" href="/minhu/minhu.css">
 <link rel="stylesheet" href="/portal.css">
 <script>
-  // Old invite links look like /?room=ABCD: they belong to the card game.
+  // Old invite links look like /?room=ABCD: the server sends them to the room's game (this is the fallback).
   (function () {
-    if (new URLSearchParams(location.search).get('room')) location.replace('/screw.html' + location.search);
+    const room = new URLSearchParams(location.search).get('room');
+    if (room) location.replace('/join?code=' + encodeURIComponent(room));
   })();
 </script>
 </head>
-<body class="portal">
-<main class="pt">
-  <header class="pt-head">
-    <h1>ألعاب الأصدقاء</h1>
-    <p>اختر لعبة، أنشئ غرفة، وأرسل الرابط لأصدقائك. وحدك؟ كل الألعاب تنلعب ضد الكمبيوتر.</p>
-  </header>
+<body class="portal lp">
+<a class="lp-skip" href="#games">انتقل إلى الألعاب</a>
 
-  <div class="pt-install" id="pt-install" hidden>
-    <img src="/icons/icon.svg" alt="" width="44" height="44">
-    <div class="txt"><b>ثبّت الألعاب على جهازك</b><span data-note>تفتح مثل التطبيق، بشاشة كاملة، من أيقونة على الشاشة الرئيسية.</span></div>
-    <button type="button" class="pt-ibtn" data-install>تثبيت</button>
-    <button type="button" class="pt-iclose" data-close aria-label="إخفاء">✕</button>
-  </div>
-
-  <div class="pt-resume" id="resume" hidden></div>
-
-  <nav class="pt-filters" aria-label="أنواع الألعاب">
-    <button type="button" aria-pressed="true" data-cat="all">الكل</button>
-    <button type="button" aria-pressed="false" data-cat="cards">ورق</button>
-    <button type="button" aria-pressed="false" data-cat="board">لوح ونرد</button>
-    <button type="button" aria-pressed="false" data-cat="quick">ذكاء وسرعة</button>
+<header class="lp-top" id="lp-top">
+  <a class="lp-brand" href="/" aria-label="ألعاب الأصدقاء، الصفحة الرئيسية">
+    <img src="/icons/icon.svg" alt="" width="36" height="36"><span>ألعاب الأصدقاء</span>
+  </a>
+  <nav class="lp-nav" aria-label="أقسام الصفحة">
+    <a href="#games">الألعاب</a>
+    <a href="#how">طريقة اللعب</a>
+    <a href="#why">المزايا</a>
   </nav>
+  <a class="lp-topcta" href="#join">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3"/></svg>
+    <span>عندي كود</span>
+  </a>
+</header>
 
-  <section class="pt-games" aria-label="الألعاب">
-    <article class="pt-card" id="game-screw" data-cat="cards">
-      <div class="pt-art"><div class="pt-cards" id="screw-art" aria-hidden="true"></div></div>
-      <div class="pt-title"><h2>سكرو</h2><span class="pt-tag live">متاحة الآن</span></div>
-      <p class="pt-desc">لعبة ورق للذاكرة والجرأة: احفظ كروتك، بدّل وبصّر، وأعلن "سكرو" قبل الجميع. المجموع الأقل يفوز.</p>
-      <div class="pt-meta"><span>1 – 6 لاعبين</span><span>ضد الكمبيوتر</span><span>5 جولات</span></div>
-      <div class="pt-actions">
-        <a class="pt-btn primary" href="/screw.html">العب سكرو</a>
+<main>
+  <!-- the table: pieces of every game floating over the felt (built by landing.js) -->
+  <section class="lp-hero" aria-labelledby="lp-title">
+    <canvas class="lp-dust" aria-hidden="true"></canvas>
+    <div class="lp-scene" aria-hidden="true"><div class="lp-stage" id="lp-stage"></div></div>
+    <div class="lp-hero-in">
+      <p class="lp-eyebrow"><span class="lp-dot"></span>8 ألعاب · مجاناً · بلا تنزيل</p>
+      <h1 class="lp-title" id="lp-title"><span>ألعاب</span> <span>الأصدقاء</span></h1>
+      <p class="lp-lead">لمّة الربع صارت أونلاين: ورق وطاولي ودومنو وبنك الحظ وغيرها. أنشئ غرفة، دز الرابط، والعبوا سوا من أي مكان.</p>
+      <div class="lp-ctas">
+        <a class="lp-btn gold big" href="#games">يلا نلعب
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></a>
+        <a class="lp-btn ghost big" href="#join">عندي كود غرفة</a>
       </div>
-    </article>
-
-    <article class="pt-card" id="game-seven" data-cat="cards">
-      <div class="pt-art"><div class="pt-seven" id="seven-art" aria-hidden="true"></div></div>
-      <div class="pt-title"><h2>سبعة وسبعة</h2><span class="pt-tag live">متاحة الآن</span></div>
-      <p class="pt-desc">لعبة ورق ملوّنة: طابق اللون أو الرقم، ومنع وعكس و+2 وجوكر. أول من يخلص كروته يفوز بالجولة.</p>
-      <div class="pt-meta"><span>1 – 6 لاعبين</span><span>ضد الكمبيوتر</span><span>3 أو 5 جولات</span></div>
-      <div class="pt-actions">
-        <a class="pt-btn primary" href="/seven.html">العب سبعة وسبعة</a>
-      </div>
-    </article>
-
-    <article class="pt-card" id="game-bank" data-cat="board">
-      <div class="pt-art">
-        <div class="pt-board" aria-hidden="true"></div>
-        <div class="pt-token"></div><div class="pt-token b"></div>
-        <div class="pt-dice" aria-hidden="true"></div>
-      </div>
-      <div class="pt-title"><h2>بنك الحظ</h2><span class="pt-tag live">متاحة الآن</span></div>
-      <p class="pt-desc">لعبة عقارات في مناطق بغداد: ارمِ النرد، اشترِ الأراضي، ابنِ البيوت، زايد وتبادل، وأفلس خصومك.</p>
-      <div class="pt-meta"><span>1 – 6 لاعبين</span><span>ضد الكمبيوتر</span><span>مزاد وتبادل ورهن</span></div>
-      <div class="pt-actions">
-        <a class="pt-btn primary" href="/bank.html">العب بنك الحظ</a>
-      </div>
-    </article>
-
-    <article class="pt-card" id="game-snakes" data-cat="board">
-      <div class="pt-art">
-        <svg class="pt-sl" viewBox="0 0 250 250" aria-hidden="true">
-          <g id="sl-squares"></g>
-          <g class="lad"><line x1="62" y1="212" x2="112" y2="88"/><line x1="92" y1="224" x2="142" y2="100"/><line class="r" x1="70" y1="200" x2="98" y2="211"/><line class="r" x1="80" y1="174" x2="108" y2="185"/><line class="r" x1="91" y1="148" x2="119" y2="159"/><line class="r" x1="101" y1="122" x2="129" y2="133"/><line class="r" x1="112" y1="96" x2="140" y2="107"/></g>
-          <path class="snk" d="M188 44 C 228 80, 140 110, 186 146 S 160 210, 196 222"/>
-          <path class="snk-b" d="M188 44 C 228 80, 140 110, 186 146 S 160 210, 196 222"/>
-          <ellipse class="snk-h" cx="186" cy="40" rx="16" ry="12"/><circle class="eye" cx="181" cy="36" r="3.5"/><circle class="eye" cx="192" cy="36" r="3.5"/>
-        </svg>
-        <div class="pt-token" style="top: 26px; inset-inline-start: calc(50% - 30px)"></div>
-        <div class="pt-dice pt-dice-1" aria-hidden="true"></div>
-      </div>
-      <div class="pt-title"><h2>حية ودرج</h2><span class="pt-tag live">جديدة</span></div>
-      <p class="pt-desc">ارمِ النرد واصعد الدرج وانتبه من الحيات! أول من يوصل للمربع 100 يفوز. ثلاث لوحات، قواعد تختارها، ولاعبو كمبيوتر إذا كنت وحدك.</p>
-      <div class="pt-meta"><span>1 – 6 لاعبين</span><span>ضد الكمبيوتر</span><span>جوال وحاسوب</span></div>
-      <div class="pt-actions">
-        <a class="pt-btn primary" href="/snakes.html">العب حية ودرج</a>
-      </div>
-    </article>
-
-    <article class="pt-card" id="game-domino" data-cat="board">
-      <div class="pt-art"><div class="pt-dm" id="domino-art" aria-hidden="true"></div></div>
-      <div class="pt-title"><h2>دومنو</h2><span class="pt-tag live">جديدة</span></div>
-      <p class="pt-desc">دومنو 6|6 على طاولة خضراء: طابق الأطراف، اسحب أو مرّر، وقل "دومنو!" أول واحد. سحب أو بلوك، وشراكة اثنين ضد اثنين.</p>
-      <div class="pt-meta"><span>1 – 4 لاعبين</span><span>ضد الكمبيوتر</span><span>شراكة</span></div>
-      <div class="pt-actions">
-        <a class="pt-btn primary" href="/domino.html">العب دومنو</a>
-      </div>
-    </article>
-
-    <article class="pt-card" id="game-tawla" data-cat="board">
-      <div class="pt-art"><svg class="pt-tw" id="tawla-art" viewBox="0 0 220 140" aria-hidden="true"></svg></div>
-      <div class="pt-title"><h2>طاولي</h2><span class="pt-tag live">جديدة</span></div>
-      <p class="pt-desc">الطاولي على لوح خشب: ارمِ الزار، حرّك قطعك، اضرب قطع خصمك وخرّج قبله. المارس بنقطتين، والمباراة إلى 1 أو 3 أو 5 أو 7.</p>
-      <div class="pt-meta"><span>لاعبان</span><span>ضد الكمبيوتر</span><span>اضغط أو اسحب</span></div>
-      <div class="pt-actions">
-        <a class="pt-btn primary" href="/tawla.html">العب طاولي</a>
-      </div>
-    </article>
-
-    <article class="pt-card" id="game-lagta" data-cat="quick">
-      <div class="pt-art"><div class="pt-lg" id="lagta-art" aria-hidden="true"></div></div>
-      <div class="pt-title"><h2>لقطة!</h2><span class="pt-tag live">جديدة</span></div>
-      <p class="pt-desc">كل كرتين بينهم رمز واحد مشترك. أول من يلقطه بين كرته وكرت الوسط ياخذ الكرت. لعبة سرعة وعيون للعيلة كلها.</p>
-      <div class="pt-meta"><span>1 – 8 لاعبين</span><span>ضد الكمبيوتر</span><span>سريعة</span></div>
-      <div class="pt-actions"><a class="pt-btn primary" href="/lagta.html">العب لقطة!</a></div>
-    </article>
-
-    <article class="pt-card" id="game-minhu" data-cat="quick">
-      <div class="pt-art"><div class="pt-mh" id="minhu-art" aria-hidden="true"></div></div>
-      <div class="pt-title"><h2>منو هو؟</h2><span class="pt-tag live">جديدة</span></div>
-      <p class="pt-desc">عندك شخصية سرية وخصمك عنده وحدة. اسأل "لابس نظارات؟"، اقلب الوجوه المستبعدة، وخمّن قبله. 24 شخصية مرسومة.</p>
-      <div class="pt-meta"><span>لاعبان</span><span>ضد الكمبيوتر</span><span>أسئلة وتخمين</span></div>
-      <div class="pt-actions"><a class="pt-btn primary" href="/minhu.html">العب منو هو؟</a></div>
-    </article>
+      <div class="pt-resume" id="resume" hidden></div>
+      <ul class="lp-trust">
+        <li>بلا حساب</li>
+        <li>جوال وحاسوب</li>
+        <li>ضد الكمبيوتر إذا كنت وحدك</li>
+      </ul>
+    </div>
+    <a class="lp-cue" href="#join" aria-label="انزل للأسفل"><span></span></a>
   </section>
 
-  <p class="pt-foot">الغرف تعيش في ذاكرة الخادم: إذا نام الخادم تُنشئ غرفة جديدة وتكمل.</p>
+  <!-- a friend sent a code: straight to their room, whatever the game -->
+  <section class="lp-join" id="join" aria-labelledby="join-title">
+    <div class="lp-join-card lp-reveal">
+      <div class="lp-join-ic" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3"/></svg>
+      </div>
+      <div class="lp-join-txt">
+        <h2 id="join-title">ربعك دزولك كود؟</h2>
+        <p>اكتبه هنا ونوديك لغرفتهم مباشرة، أي لعبة كانت.</p>
+      </div>
+      <form class="lp-join-form" action="/join" method="get" autocomplete="off">
+        <label class="lp-sr" for="join-code">كود الغرفة (4 أحرف إنجليزية)</label>
+        <div class="lp-code">
+          <input id="join-code" name="code" type="text" maxlength="4" required autocapitalize="characters" autocorrect="off" spellcheck="false" dir="ltr" enterkeyhint="go" placeholder="ABCD" aria-describedby="join-err">
+          <span class="lp-slots" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        </div>
+        <button class="lp-btn gold" type="submit">ادخل الغرفة</button>
+      </form>
+      <p class="lp-join-err" id="join-err" role="alert" hidden></p>
+    </div>
+  </section>
+
+  <section class="lp-games" id="games" aria-labelledby="games-title">
+    <div class="lp-head lp-reveal">
+      <p class="lp-kicker">الألعاب</p>
+      <h2 id="games-title">اختار لعبتك</h2>
+      <p>ثماني ألعاب، كلها تنلعب ويا ربعك أو ضد الكمبيوتر.</p>
+    </div>
+
+    <nav class="pt-filters lp-reveal" aria-label="أنواع الألعاب">
+      <button type="button" aria-pressed="true" data-cat="all">الكل</button>
+      <button type="button" aria-pressed="false" data-cat="cards">ورق</button>
+      <button type="button" aria-pressed="false" data-cat="board">لوح ونرد</button>
+      <button type="button" aria-pressed="false" data-cat="quick">ذكاء وسرعة</button>
+    </nav>
+
+    <div class="pt-games">
+      <article class="pt-card lp-reveal" id="game-screw" data-cat="cards" style="--accent: var(--card-red)">
+        <a class="pt-cover" href="/screw.html" tabindex="-1" aria-hidden="true"></a>
+        <div class="pt-art"><div class="pt-cards" id="screw-art" aria-hidden="true"></div></div>
+        <div class="pt-title"><h3>سكرو</h3><span class="pt-tag">ورق</span></div>
+        <p class="pt-desc">لعبة ورق للذاكرة والجرأة: احفظ كروتك، بدّل وبصّر، وأعلن "سكرو" قبل الجميع. المجموع الأقل يفوز.</p>
+        <div class="pt-meta"><span>1 – 6 لاعبين</span><span>ضد الكمبيوتر</span><span>5 جولات</span></div>
+        <div class="pt-actions"><a class="pt-btn primary" href="/screw.html">العب سكرو</a></div>
+      </article>
+
+      <article class="pt-card lp-reveal" id="game-seven" data-cat="cards" style="--accent: var(--u-yellow)">
+        <a class="pt-cover" href="/seven.html" tabindex="-1" aria-hidden="true"></a>
+        <div class="pt-art"><div class="pt-seven" id="seven-art" aria-hidden="true"></div></div>
+        <div class="pt-title"><h3>سبعة وسبعة</h3><span class="pt-tag">ورق</span></div>
+        <p class="pt-desc">لعبة ورق ملوّنة: طابق اللون أو الرقم، ومنع وعكس و+2 وجوكر. أول من يخلص كروته يفوز بالجولة.</p>
+        <div class="pt-meta"><span>1 – 6 لاعبين</span><span>ضد الكمبيوتر</span><span>3 أو 5 جولات</span></div>
+        <div class="pt-actions"><a class="pt-btn primary" href="/seven.html">العب سبعة وسبعة</a></div>
+      </article>
+
+      <article class="pt-card lp-reveal" id="game-bank" data-cat="board" style="--accent: var(--g6)">
+        <a class="pt-cover" href="/bank.html" tabindex="-1" aria-hidden="true"></a>
+        <div class="pt-art">
+          <div class="pt-board" aria-hidden="true"></div>
+          <div class="pt-token"></div><div class="pt-token b"></div>
+          <div class="pt-dice" aria-hidden="true"></div>
+        </div>
+        <div class="pt-title"><h3>بنك الحظ</h3><span class="pt-tag">لوح ونرد</span></div>
+        <p class="pt-desc">لعبة عقارات في مناطق بغداد: ارمِ النرد، اشترِ الأراضي، ابنِ البيوت، زايد وتبادل، وأفلس خصومك.</p>
+        <div class="pt-meta"><span>1 – 6 لاعبين</span><span>ضد الكمبيوتر</span><span>مزاد وتبادل ورهن</span></div>
+        <div class="pt-actions"><a class="pt-btn primary" href="/bank.html">العب بنك الحظ</a></div>
+      </article>
+
+      <article class="pt-card lp-reveal" id="game-snakes" data-cat="board" style="--accent: var(--sl-snake1)">
+        <a class="pt-cover" href="/snakes.html" tabindex="-1" aria-hidden="true"></a>
+        <div class="pt-art">
+          <svg class="pt-sl" viewBox="0 0 250 250" aria-hidden="true">
+            <g id="sl-squares"></g>
+            <g class="lad"><line x1="62" y1="212" x2="112" y2="88"/><line x1="92" y1="224" x2="142" y2="100"/><line class="r" x1="70" y1="200" x2="98" y2="211"/><line class="r" x1="80" y1="174" x2="108" y2="185"/><line class="r" x1="91" y1="148" x2="119" y2="159"/><line class="r" x1="101" y1="122" x2="129" y2="133"/><line class="r" x1="112" y1="96" x2="140" y2="107"/></g>
+            <path class="snk" d="M188 44 C 228 80, 140 110, 186 146 S 160 210, 196 222"/>
+            <path class="snk-b" d="M188 44 C 228 80, 140 110, 186 146 S 160 210, 196 222"/>
+            <ellipse class="snk-h" cx="186" cy="40" rx="16" ry="12"/><circle class="eye" cx="181" cy="36" r="3.5"/><circle class="eye" cx="192" cy="36" r="3.5"/>
+          </svg>
+          <div class="pt-token" style="top: 26px; inset-inline-start: calc(50% - 30px)"></div>
+          <div class="pt-dice pt-dice-1" aria-hidden="true"></div>
+        </div>
+        <div class="pt-title"><h3>حية ودرج</h3><span class="pt-tag">لوح ونرد</span></div>
+        <p class="pt-desc">ارمِ النرد واصعد الدرج وانتبه من الحيات! أول من يوصل للمربع 100 يفوز. ثلاث لوحات، وقواعد تختارها.</p>
+        <div class="pt-meta"><span>1 – 6 لاعبين</span><span>ضد الكمبيوتر</span><span>للعيلة كلها</span></div>
+        <div class="pt-actions"><a class="pt-btn primary" href="/snakes.html">العب حية ودرج</a></div>
+      </article>
+
+      <article class="pt-card lp-reveal" id="game-domino" data-cat="board" style="--accent: var(--dm-felt-glow)">
+        <a class="pt-cover" href="/domino.html" tabindex="-1" aria-hidden="true"></a>
+        <div class="pt-art"><div class="pt-dm" id="domino-art" aria-hidden="true"></div></div>
+        <div class="pt-title"><h3>دومنو</h3><span class="pt-tag">لوح ونرد</span></div>
+        <p class="pt-desc">دومنو 6|6 على طاولة خضراء: طابق الأطراف، اسحب أو مرّر، وقل "دومنو!" أول واحد. سحب أو بلوك، وشراكة اثنين ضد اثنين.</p>
+        <div class="pt-meta"><span>1 – 4 لاعبين</span><span>ضد الكمبيوتر</span><span>شراكة</span></div>
+        <div class="pt-actions"><a class="pt-btn primary" href="/domino.html">العب دومنو</a></div>
+      </article>
+
+      <article class="pt-card lp-reveal" id="game-tawla" data-cat="board" style="--accent: var(--tw-surface)">
+        <a class="pt-cover" href="/tawla.html" tabindex="-1" aria-hidden="true"></a>
+        <div class="pt-art"><svg class="pt-tw" id="tawla-art" viewBox="0 0 220 140" aria-hidden="true"></svg></div>
+        <div class="pt-title"><h3>طاولي</h3><span class="pt-tag">لوح ونرد</span></div>
+        <p class="pt-desc">الطاولي على لوح خشب: ارمِ الزار، حرّك قطعك، اضرب قطع خصمك وخرّج قبله. المارس بنقطتين، والمباراة إلى 1 أو 3 أو 5 أو 7.</p>
+        <div class="pt-meta"><span>لاعبان</span><span>ضد الكمبيوتر</span><span>اضغط أو اسحب</span></div>
+        <div class="pt-actions"><a class="pt-btn primary" href="/tawla.html">العب طاولي</a></div>
+      </article>
+
+      <article class="pt-card lp-reveal" id="game-lagta" data-cat="quick" style="--accent: var(--lg-glow-b)">
+        <a class="pt-cover" href="/lagta.html" tabindex="-1" aria-hidden="true"></a>
+        <div class="pt-art"><div class="pt-lg" id="lagta-art" aria-hidden="true"></div></div>
+        <div class="pt-title"><h3>لقطة!</h3><span class="pt-tag">ذكاء وسرعة</span></div>
+        <p class="pt-desc">كل كرتين بينهم رمز واحد مشترك. أول من يلقطه بين كرته وكرت الوسط ياخذ الكرت. لعبة سرعة وعيون للعيلة كلها.</p>
+        <div class="pt-meta"><span>1 – 8 لاعبين</span><span>ضد الكمبيوتر</span><span>سريعة</span></div>
+        <div class="pt-actions"><a class="pt-btn primary" href="/lagta.html">العب لقطة!</a></div>
+      </article>
+
+      <article class="pt-card lp-reveal" id="game-minhu" data-cat="quick" style="--accent: var(--mh-dev-blue)">
+        <a class="pt-cover" href="/minhu.html" tabindex="-1" aria-hidden="true"></a>
+        <div class="pt-art"><div class="pt-mh" id="minhu-art" aria-hidden="true"></div></div>
+        <div class="pt-title"><h3>منو هو؟</h3><span class="pt-tag">ذكاء وسرعة</span></div>
+        <p class="pt-desc">عندك شخصية سرية وخصمك عنده وحدة. اسأل "لابس نظارات؟"، اقلب الوجوه المستبعدة، وخمّن قبله. أربع لوحات مرسومة.</p>
+        <div class="pt-meta"><span>لاعبان</span><span>ضد الكمبيوتر</span><span>أسئلة ومكالمة</span></div>
+        <div class="pt-actions"><a class="pt-btn primary" href="/minhu.html">العب منو هو؟</a></div>
+      </article>
+    </div>
+  </section>
+
+  <section class="lp-how" id="how" aria-labelledby="how-title">
+    <div class="lp-head lp-reveal">
+      <p class="lp-kicker">بثلاث خطوات</p>
+      <h2 id="how-title">من الفكرة للّعب بأقل من دقيقة</h2>
+    </div>
+    <ol class="lp-steps">
+      <li class="lp-step lp-reveal">
+        <span class="lp-num">1</span>
+        <span class="lp-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.6"/></svg></span>
+        <h3>اختار لعبة</h3>
+        <p>اكتب اسمك واضغط "إنشاء غرفة". لا حساب ولا تنزيل ولا انتظار.</p>
+      </li>
+      <li class="lp-step lp-reveal">
+        <span class="lp-num">2</span>
+        <span class="lp-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></svg></span>
+        <h3>دز الرابط</h3>
+        <p>شارك رابط الغرفة أو كودها بالواتساب، وربعك يدخلون بضغطة وحدة.</p>
+      </li>
+      <li class="lp-step lp-reveal">
+        <span class="lp-num">3</span>
+        <span class="lp-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="4"/><circle cx="8.5" cy="8.5" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="15.5" cy="15.5" r="1.2"/></svg></span>
+        <h3>العبوا سوا</h3>
+        <p>كل واحد من جواله ومن أي مكان. نقص لاعب؟ ضيف الكمبيوتر يكمّل وياكم.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section class="lp-why" id="why" aria-labelledby="why-title">
+    <div class="lp-head lp-reveal">
+      <p class="lp-kicker">ليش راح تحبها</p>
+      <h2 id="why-title">مصنوعة للّمّة</h2>
+    </div>
+    <div class="lp-feats">
+      <article class="lp-feat lp-reveal">
+        <span class="lp-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4.5V8M9.5 12.5h.01M14.5 12.5h.01M9.5 16h5"/></svg></span>
+        <h3>الكمبيوتر يلعب وياك</h3>
+        <p>وحدك؟ ضيف لاعبين كمبيوتر بكل الألعاب. يلعبون بذكاء، وما يشوفون غير اللي تشوفه أنت.</p>
+      </article>
+      <article class="lp-feat lp-reveal">
+        <span class="lp-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 9a13 13 0 0 1 18 0M6 12.5a8.5 8.5 0 0 1 12 0M9 16a4 4 0 0 1 6 0"/><circle cx="12" cy="19.5" r="1"/></svg></span>
+        <h3>انقطع النت؟ ولا يهمك</h3>
+        <p>ترجع لنفس مكانك ونفس كروتك. وإذا تأخرت، الخادم يلعب دورك لحد ما ترجع.</p>
+      </article>
+      <article class="lp-feat lp-reveal">
+        <span class="lp-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5a4 4 0 0 0 7 0M9 9.5h.01M15 9.5h.01"/></svg></span>
+        <h3>تفاعلات ومكالمة</h3>
+        <p>إيموجي تطير فوق اسمك عند الكل، ومكالمة صوتية خاصة بلعبة منو هو؟</p>
+      </article>
+      <article class="lp-feat lp-reveal">
+        <span class="lp-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg></span>
+        <h3>تصير تطبيق</h3>
+        <p>ثبّتها على شاشتك الرئيسية وتفتح بشاشة كاملة، مثل أي تطبيق.</p>
+      </article>
+      <article class="lp-feat lp-reveal">
+        <span class="lp-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg></span>
+        <h3>على ذوقنا</h3>
+        <p>بنك الحظ بشوارع بغداد، والطاولي والدومنو والسكرو مثل ما نلعبهم بالبيت.</p>
+      </article>
+      <article class="lp-feat lp-reveal">
+        <span class="lp-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M13 2.5L5 13.5h6l-1 8 8-11h-6z"/></svg></span>
+        <h3>خفيفة وسريعة</h3>
+        <p>تفتح بثواني على أي جوال. بلا إعلانات، وبلا تسجيل، وبلا انتظار.</p>
+      </article>
+    </div>
+    <div class="lp-stats lp-reveal" role="list">
+      <div role="listitem"><b data-count="8">8</b><span>ألعاب</span></div>
+      <div role="listitem"><b data-count="8">8</b><span>لاعبين بالغرفة</span></div>
+      <div role="listitem"><b>0</b><span>تنزيل</span></div>
+      <div role="listitem"><b data-count="100" data-suffix="%">100%</b><span>مجاناً</span></div>
+    </div>
+  </section>
+
+  <section class="lp-installwrap" aria-label="تثبيت التطبيق">
+    <div class="pt-install" id="pt-install" hidden>
+      <img src="/icons/icon.svg" alt="" width="56" height="56">
+      <div class="txt"><b>خلّيها تطبيق على جوالك</b><span data-note>تفتح بشاشة كاملة من أيقونة على الشاشة الرئيسية، مثل أي تطبيق.</span></div>
+      <button type="button" class="pt-ibtn" data-install>تثبيت</button>
+      <button type="button" class="pt-iclose" data-close aria-label="إخفاء">✕</button>
+    </div>
+  </section>
+
+  <section class="lp-final lp-reveal" aria-labelledby="final-title">
+    <h2 id="final-title">الطاولة جاهزة. وين الربع؟</h2>
+    <p>اختار لعبة، أنشئ غرفة، ودز الرابط للكروب.</p>
+    <a class="lp-btn gold big" href="#games">يلا نلعب
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></a>
+  </section>
 </main>
+
+<footer class="lp-foot">
+  <a class="lp-brand" href="/"><img src="/icons/icon.svg" alt="" width="32" height="32"><span>ألعاب الأصدقاء</span></a>
+  <nav class="lp-foot-games" aria-label="كل الألعاب">
+    <a href="/screw.html">سكرو</a><a href="/seven.html">سبعة وسبعة</a><a href="/bank.html">بنك الحظ</a><a href="/snakes.html">حية ودرج</a>
+    <a href="/domino.html">دومنو</a><a href="/tawla.html">طاولي</a><a href="/lagta.html">لقطة!</a><a href="/minhu.html">منو هو؟</a>
+  </nav>
+  <p class="pt-foot">الغرف تعيش في ذاكرة الخادم: إذا نام الخادم تُنشئ غرفة جديدة وتكمل.</p>
+</footer>
 
 <script src="/server/config.js"></script>
 <script src="/server/deck.js"></script>
 <script src="/cards.js"></script>
+<script src="/server/games/seven/config.js"></script>
+<script src="/server/games/seven/deck.js"></script>
+<script src="/seven/cards.js"></script>
 <script src="/domino/tiles.js"></script>
 <script src="/server/games/lagta/config.js"></script>
 <script src="/server/games/minhu/config.js"></script>
 <script src="/minhu/faces.js"></script>
-<script>
-  (function () {
-    // screw art: back, red screw, minus one (same cards as the game)
-    const D = ScrewDeck, K = ScrewCards;
-    const art = document.getElementById('screw-art');
-    [{ hidden: true }, D.makeCard('screw_red'), D.makeCard('minus1')].forEach(function (c) {
-      const d = document.createElement('div');
-      d.className = 'pc';
-      d.innerHTML = K.svg(c, false);
-      art.append(d);
-    });
-    // seven art: four fanned cards in the game colours
-    const sv = document.getElementById('seven-art');
-    [['red', '7'], ['yellow', '+2'], ['green', 'عكس'], ['blue', '7']].forEach(function (c) {
-      const d = document.createElement('div');
-      d.className = 'pt-ucard ' + c[0];
-      d.innerHTML = '<span>' + c[1] + '</span>';
-      sv.append(d);
-    });
-    // bank art: coloured bars on the border squares of a small board
-    const bars = ['--g1', '--g2', '--g3', '--g4', '--g5', '--g6', '--g7', '--g8'];
-    const board = document.querySelector('.pt-board');
-    const ring = [0, 1, 2, 3, 4, 9, 14, 19, 24, 23, 22, 21, 20, 15, 10, 5];
-    for (let i = 0; i < 25; i++) {
-      const cell = document.createElement('i');
-      const r = ring.indexOf(i);
-      if (r >= 0 && r % 2 === 1) cell.style.setProperty('--bar', 'var(' + bars[(r >> 1) % bars.length] + ')');
-      if ([6, 7, 8, 11, 12, 13, 16, 17, 18].indexOf(i) >= 0) cell.style.display = 'none';
-      board.append(cell);
-    }
-    const mid = document.createElement('i');
-    mid.className = 'mid';
-    board.append(mid);
-    // snakes art: a 5x5 checker board under the ladder and the snake, and one die
-    const sq = document.getElementById('sl-squares');
-    for (let r = 0; r < 5; r++) {
-      for (let c = 0; c < 5; c++) {
-        const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-        rect.setAttribute('x', c * 50); rect.setAttribute('y', r * 50); rect.setAttribute('width', 50); rect.setAttribute('height', 50);
-        rect.setAttribute('class', (r + c) % 2 ? 'b' : 'a r' + r);
-        sq.append(rect);
-      }
-    }
-    // domino art: a short line of tiles on a felt, one tile standing
-    const DT = window.DominoTiles;
-    DT.ensureDefs();
-    const dm = document.getElementById('domino-art');
-    [['h', 6, 6, 't1'], ['h', 6, 3, 't2'], ['v', 3, 1, 't3'], ['v', 5, 2, 't4']].forEach(function (t) {
-      const s = document.createElement('span');
-      s.className = 'pt-dt ' + t[0] + ' ' + t[3];
-      s.innerHTML = t[0] === 'h' ? DT.tileSVGh(t[1], t[2]) : DT.tileSVG(t[1], t[2]);
-      dm.append(s);
-    });
-    // tawla art: a small wooden board
-    (function () {
-      const s = document.getElementById('tawla-art');
-      const NS = 'http://www.w3.org/2000/svg';
-      const add = function (tag, a) { const e = document.createElementNS(NS, tag); Object.keys(a).forEach(function (k) { e.setAttribute(k, a[k]); }); s.append(e); return e; };
-      add('rect', { x: 0, y: 0, width: 220, height: 140, rx: 12, class: 'fr' });
-      add('rect', { x: 8, y: 8, width: 96, height: 124, rx: 3, class: 'sf' });
-      add('rect', { x: 116, y: 8, width: 96, height: 124, rx: 3, class: 'sf' });
-      for (let i = 0; i < 6; i++) {
-        [8, 116].forEach(function (x0) {
-          const x = x0 + i * 16;
-          add('path', { d: 'M' + x + ' 8 L' + (x + 16) + ' 8 L' + (x + 8) + ' 62 Z', class: i % 2 ? 'pa' : 'pb' });
-          add('path', { d: 'M' + x + ' 132 L' + (x + 16) + ' 132 L' + (x + 8) + ' 78 Z', class: i % 2 ? 'pb' : 'pa' });
-        });
-      }
-      [[124, 124, 'w'], [124, 110, 'w'], [204, 16, 'w'], [204, 30, 'w'], [16, 124, 'b'], [16, 110, 'b'], [16, 96, 'b'], [76, 16, 'b'], [76, 30, 'b'], [172, 124, 'w']].forEach(function (c) {
-        add('circle', { cx: c[0], cy: c[1], r: 7, class: 'ck ' + c[2] });
-      });
-      [[146, 60, 5, -12], [168, 66, 3, 10]].forEach(function (d) {
-        add('rect', { x: d[0], y: d[1], width: 18, height: 18, rx: 4, class: 'dz', transform: 'rotate(' + d[3] + ' ' + (d[0] + 9) + ' ' + (d[1] + 9) + ')' });
-      });
-    })();
-    // lagta art: two round cards with a few symbols each (the shared one glows)
-    (function () {
-      const box = document.getElementById('lagta-art');
-      const S = window.LagtaConfig.SYMBOLS;
-      [[[8, 12, 23, 45, 32], 'a'], [[8, 16, 40, 54, 26], 'b']].forEach(function (c) {
-        const card = document.createElement('div');
-        card.className = 'pt-lgc ' + c[1];
-        c[0].forEach(function (s, i) {
-          const e = document.createElement('span');
-          e.className = 'p' + i + (s === 8 ? ' hit' : '');
-          e.textContent = S[s];
-          card.append(e);
-        });
-        box.append(card);
-      });
-    })();
-    // minhu art: three faces, one turned down
-    (function () {
-      const F = window.MinhuFaces;
-      F.ensureDefs();
-      const box = document.getElementById('minhu-art');
-      [[5, ''], [13, ''], [20, ' down']].forEach(function (c) {
-        const d = document.createElement('div');
-        d.className = 'mh-card bg-' + window.MinhuConfig.CHARACTERS[c[0]].bg + c[1];
-        d.innerHTML = '<div class="inner"><div class="front"><div class="pic">' + F.face(c[0]) + '</div></div><div class="back">؟</div></div>';
-        box.append(d);
-      });
-    })();
-    const one = document.querySelector('.pt-dice-1');
-    const six = document.createElement('span');
-    for (let k = 1; k <= 9; k++) { const b = document.createElement('b'); if ([1, 3, 4, 6, 7, 9].indexOf(k) >= 0) b.className = 'on'; six.append(b); }
-    one.append(six);
-    const dice = document.querySelector('.pt-dice');
-    [[5, 9, 1, 3, 7], [1, 3, 5, 7, 9, 4]].forEach(function (on) {
-      const s = document.createElement('span');
-      for (let k = 1; k <= 9; k++) { const b = document.createElement('b'); if (on.indexOf(k) >= 0) b.className = 'on'; s.append(b); }
-      dice.append(s);
-    });
-    // every room saved on this device gets a way back
-    try {
-      const saved = [['screw', 'سكرو', '/screw.html'], ['seven', 'سبعة وسبعة', '/seven.html'], ['bank', 'بنك الحظ', '/bank.html'], ['snakes', 'حية ودرج', '/snakes.html'], ['domino', 'دومنو', '/domino.html'], ['tawla', 'طاولي', '/tawla.html'], ['lagta', 'لقطة!', '/lagta.html'], ['minhu', 'منو هو؟', '/minhu.html']].map(function (g) {
-        const s = JSON.parse(localStorage.getItem(g[0] + '.session') || 'null');
-        return s && s.code ? { game: g[0], code: s.code, name: g[1], url: g[2] } : null;
-      }).filter(Boolean);
-      if (saved.length) {
-        const box = document.getElementById('resume');
-        const title = document.createElement('div');
-        title.className = 'pt-rtitle';
-        title.textContent = saved.length > 1 ? 'عندك غرف مفتوحة' : 'عندك غرفة مفتوحة';
-        box.append(title);
-        saved.forEach(function (r) {
-          const a = document.createElement('a');
-          a.className = 'pt-back';
-          a.href = r.url + '?room=' + encodeURIComponent(r.code);
-          const t = document.createElement('span');
-          const b1 = document.createElement('b');
-          b1.textContent = r.name;
-          const b2 = document.createElement('b');
-          b2.className = 'code';
-          b2.textContent = r.code;
-          t.append(b1, ' · الغرفة ', b2);
-          const go = document.createElement('span');
-          go.className = 'go';
-          go.textContent = 'ارجع';
-          a.append(t, go);
-          box.append(a);
-        });
-        box.hidden = false;
-      }
-    } catch (e) { /* storage unavailable: no shortcut */ }
-    // the filters: show one kind of game, remembered for next time
-    const cards = Array.prototype.slice.call(document.querySelectorAll('.pt-card'));
-    const chips = Array.prototype.slice.call(document.querySelectorAll('.pt-filters button'));
-    function show(cat) {
-      chips.forEach(function (c) { c.setAttribute('aria-pressed', c.dataset.cat === cat ? 'true' : 'false'); });
-      cards.forEach(function (c) { c.hidden = cat !== 'all' && c.dataset.cat !== cat; });
-      try { localStorage.setItem('portal.cat', cat); } catch (e) { /* no storage */ }
-    }
-    chips.forEach(function (c) { c.addEventListener('click', function () { show(c.dataset.cat); }); });
-    try { const last = localStorage.getItem('portal.cat'); if (last && chips.some(function (c) { return c.dataset.cat === last; })) show(last); } catch (e) { /* no storage */ }
-  })();
-</script>
+<script src="/sound.js"></script>
+<script src="/landing.js"></script>
 <script src="/pwa.js" defer></script>
 </body>
 </html>

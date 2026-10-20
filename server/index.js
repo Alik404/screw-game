@@ -67,6 +67,37 @@ function createApp() {
   // Changes on every start: lets clients tell "the server restarted and every room is gone".
   const bootId = crypto.randomUUID();
 
+  // a few code lookups a minute per address, so room codes cannot be scanned quickly
+  const lookups = new Map();
+  function tooManyLookups(req) {
+    const key = String(req.headers['x-forwarded-for'] || '') + '|' + (req.socket.remoteAddress || '');
+    const t = Date.now();
+    let e = lookups.get(key);
+    if (!e || t - e.start > 60 * 1000) {
+      if (lookups.size > 10000) lookups.clear();
+      e = { start: t, n: 0 };
+      lookups.set(key, e);
+    }
+    e.n += 1;
+    return e.n > CONFIG.JOIN_LOOKUPS_PER_MINUTE;
+  }
+
+  // "I have a code" (the home page box, and old /?room= invite links): straight to that room's game page
+  function joinRoom(req, res, raw) {
+    const code = String(raw || '').trim().toUpperCase().slice(0, 12);
+    let to;
+    if (tooManyLookups(req)) {
+      to = '/?join=busy#join';
+    } else {
+      const found = /^[A-Z]+$/.test(code) ? rooms.lookup(code) : null;
+      to = found && found.game
+        ? '/' + found.game + '.html?room=' + code
+        : '/?join=' + (found && found.closed ? 'closed' : 'missing') + '&code=' + encodeURIComponent(code) + '#join';
+    }
+    res.writeHead(302, { Location: to, 'Cache-Control': 'no-store' });
+    res.end();
+  }
+
   const server = http.createServer((req, res) => {
     let url;
     try {
@@ -79,6 +110,9 @@ function createApp() {
       res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
       return res.end('ok');
     }
+    const query = new URLSearchParams((req.url || '').split('?')[1] || '');
+    if (url === '/join') return joinRoom(req, res, query.get('code'));
+    if (url === '/' && query.get('room')) return joinRoom(req, res, query.get('room'));
     if (SHARED[url]) return sendFile(res, SHARED[url]);
     const rel = url === '/' ? '/index.html' : url;
     const file = path.normalize(path.join(PUBLIC_DIR, rel));

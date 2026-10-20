@@ -30,6 +30,7 @@
     MAX_ROOMS: 200, // protection: rooms kept in memory at once
     RATE_LIMIT_MESSAGES: 40, // protection: messages one connection may send ...
     RATE_LIMIT_WINDOW_SECONDS: 10, // ... in this window
+    JOIN_LOOKUPS_PER_MINUTE: 30, // protection: "I have a code" lookups one address may make a minute
     REACTIONS: ['laugh', 'wow', 'angry', 'cry', 'clap', 'pray', 'fire', 'snake'], // quick emoji anyone can send
     REACTION_COOLDOWN_MS: 800,
     DECK: {

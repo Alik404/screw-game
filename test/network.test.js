@@ -46,7 +46,7 @@ function client(port) {
 test('serves the pages and shared engine files, and nothing else from server/', async () => {
   const { app, base } = await boot();
   try {
-    for (const p of ['/', '/index.html', '/screw.html', '/bank.html', '/seven.html', '/seven/app.js', '/snakes.html', '/snakes/app.js', '/snakes/board.js', '/snakes/snakes.css', '/server/games/snakes/config.js', '/server/games/snakes/engine.js', '/domino.html', '/domino/app.js', '/domino/tiles.js', '/domino/domino.css', '/server/games/domino/config.js', '/server/games/domino/engine.js', '/tawla.html', '/tawla/app.js', '/tawla/board.js', '/tawla/tawla.css', '/server/games/tawla/config.js', '/server/games/tawla/engine.js', '/lagta.html', '/lagta/app.js', '/lagta/lagta.css', '/server/games/lagta/config.js', '/server/games/lagta/engine.js', '/minhu.html', '/minhu/app.js', '/minhu/faces.js', '/minhu/minhu.css', '/minhu/review.html', '/minhu/call.js', '/reactions.js', '/roomend.js', '/pwa.js', '/sw.js', '/manifest.json', '/offline.html', '/icons/icon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/maskable-512.png', '/icons/apple-touch-icon.png', '/server/games/minhu/config.js', '/server/games/minhu/engine.js', '/seven/debug.html', '/server/games/seven/engine.js', '/portal.css', '/bank/preview.html', '/debug.html', '/server/engine.js', '/server/deck.js', '/server/config.js']) {
+    for (const p of ['/', '/index.html', '/screw.html', '/bank.html', '/seven.html', '/seven/app.js', '/snakes.html', '/snakes/app.js', '/snakes/board.js', '/snakes/snakes.css', '/server/games/snakes/config.js', '/server/games/snakes/engine.js', '/domino.html', '/domino/app.js', '/domino/tiles.js', '/domino/domino.css', '/server/games/domino/config.js', '/server/games/domino/engine.js', '/tawla.html', '/tawla/app.js', '/tawla/board.js', '/tawla/tawla.css', '/server/games/tawla/config.js', '/server/games/tawla/engine.js', '/lagta.html', '/lagta/app.js', '/lagta/lagta.css', '/server/games/lagta/config.js', '/server/games/lagta/engine.js', '/minhu.html', '/minhu/app.js', '/minhu/faces.js', '/minhu/minhu.css', '/minhu/review.html', '/minhu/call.js', '/reactions.js', '/roomend.js', '/pwa.js', '/sw.js', '/manifest.json', '/offline.html', '/icons/icon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/maskable-512.png', '/icons/apple-touch-icon.png', '/server/games/minhu/config.js', '/server/games/minhu/engine.js', '/seven/debug.html', '/server/games/seven/engine.js', '/portal.css', '/landing.js', '/bank/preview.html', '/debug.html', '/server/engine.js', '/server/deck.js', '/server/config.js']) {
       const r = await get(base + p);
       assert.equal(r.status, 200, p);
     }
@@ -170,4 +170,35 @@ test('rate limit: a flood gets an Arabic error, a much bigger flood drops the co
     for (let i = 0; i < CONFIG.RATE_LIMIT_MESSAGES * 2; i++) c.send({ type: 'draw' });
     await closed;
   } finally { await app.close(); }
+});
+
+// GET that reports where a redirect points
+function where(url) {
+  return new Promise((resolve, reject) => {
+    http.get(url, { agent: false, headers: { connection: 'close' } }, (res) => {
+      res.resume();
+      res.on('end', () => resolve({ status: res.statusCode, to: res.headers.location }));
+    }).on('error', reject);
+  });
+}
+
+test('"I have a code": /join and old /?room= links go straight to the room\'s game; unknown, ended and too many say so', async () => {
+  const { app, port, base } = await boot();
+  const c = client(port);
+  try {
+    await c.open;
+    c.send({ type: 'create_room', name: 'علي', game: 'domino' });
+    const code = (await c.next((m) => m.type === 'joined')).code;
+    assert.deepEqual(await where(base + '/join?code=' + code.toLowerCase()), { status: 302, to: '/domino.html?room=' + code });
+    assert.deepEqual(await where(base + '/?room=' + code), { status: 302, to: '/domino.html?room=' + code });
+    assert.equal((await where(base + '/join?code=ZZZZ')).to, '/?join=missing&code=ZZZZ#join');
+    assert.equal((await where(base + '/join?code=<b>')).to, '/?join=missing&code=%3CB%3E#join');
+    assert.equal((await get(base + '/?join=missing')).status, 200, 'the home page itself still opens');
+    c.send({ type: 'close_room' });
+    await c.next((m) => m.type === 'room_closed');
+    assert.equal((await where(base + '/join?code=' + code)).to, '/?join=closed&code=' + code + '#join');
+    let last;
+    for (let i = 0; i < CONFIG.JOIN_LOOKUPS_PER_MINUTE; i++) last = await where(base + '/join?code=ZZZZ');
+    assert.equal(last.to, '/?join=busy#join');
+  } finally { c.ws.close(); await app.close(); }
 });
