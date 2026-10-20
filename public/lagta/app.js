@@ -98,7 +98,7 @@
   const pageStart = Date.now();
   function savedOptions() {
     const o = store(GAME + '.options') || {};
-    return { size: C.SIZES.indexOf(o.size) >= 0 ? o.size : C.DEFAULT_SIZE, level: C.LEVELS.indexOf(o.level) >= 0 ? o.level : C.DEFAULT_LEVEL };
+    return { size: C.SIZES.indexOf(o.size) >= 0 ? o.size : C.DEFAULT_SIZE, level: C.LEVELS.indexOf(o.level) >= 0 ? o.level : C.DEFAULT_LEVEL, hint: typeof o.hint === 'boolean' ? o.hint : C.DEFAULT_HINT };
   }
 
   const S = {
@@ -106,6 +106,7 @@
     you: null, room: null, game: null, names: {}, opts: savedOptions(), optsSent: null, sheet: null, toast: null, homeError: '',
     bootId: null, serverRestarted: false, lost: null, disconnectedAt: null, reacts: false,
     frozenUntil: 0, countdownEnd: 0, flash: null, // flash: {symbol, by, at}
+    cardSeq: 0, cardAt: 0, // when the middle card appeared (for the hint)
   };
 
   // ---------- network ----------
@@ -154,6 +155,12 @@
         m.players.forEach(function (p) { S.names[p.id] = p.name; });
         if (m.phase === 'countdown' && !S.countdownEnd) S.countdownEnd = Date.now() + C.COUNTDOWN_SECONDS * 1000;
         if (m.phase !== 'countdown') S.countdownEnd = 0;
+        // a new middle card: the hint clock starts again
+        if (m.phase === 'play' && m.seq !== S.cardSeq) {
+          S.cardSeq = m.seq;
+          S.cardAt = Date.now();
+          if (m.options && m.options.hint) setTimeout(render, C.HINT_SECONDS * 1000 + 30);
+        }
         break;
       case 'event': onEvent(m.event); break;
       case 'reaction': showReaction(m.from, m.id); return;
@@ -244,7 +251,7 @@
     layout(card).forEach(function (p) {
       const hit = o.flash !== undefined && o.flash === p.s;
       const b = h('button', {
-        class: 'lg-sym' + (hit ? ' hit' : ''), 'aria-label': 'رمز', 'data-sym': p.s,
+        class: 'lg-sym' + (hit ? ' hit' : '') + (o.hint === p.s ? ' hint' : ''), 'aria-label': 'رمز', 'data-sym': p.s,
         style: { left: p.x + '%', top: p.y + '%', '--k': p.k, '--rot': p.rot + 'deg' },
         disabled: !o.tap,
       }, h('span', null, C.SYMBOLS[p.s]));
@@ -331,8 +338,9 @@
       amHost && r.players.length < C.MAX_PLAYERS ? h('button', { class: 'with-icon', onclick: function () { send({ type: 'add_bot' }); } }, icon('bot', 20), 'أضف لاعب كمبيوتر') : null,
       amHost ? h('div', { class: 'lg-opts' },
         seg('طول اللعبة', 'size', C.SIZES, { 20: '20 كرت', 30: '30 كرت', 50: '50 كرت' }, C.SIZE_NAMES),
-        seg('سرعة الكمبيوتر', 'level', C.LEVELS, C.LEVEL_NAMES, { easy: 'يلقط ببطء', normal: 'مثل الناس', hard: 'سريع جداً' }))
-        : h('div', { class: 'lg-rules' }, h('b', null, 'قواعد الغرفة'), h('span', null, o.size + ' كرت · الكمبيوتر ' + C.LEVEL_NAMES[o.level])),
+        seg('سرعة الكمبيوتر', 'level', C.LEVELS, C.LEVEL_NAMES, { easy: 'يلقط ببطء', normal: 'مثل الناس', hard: 'سريع جداً' }),
+        seg('التلميح', 'hint', [true, false], { true: 'يلمع', false: 'بلا تلميح' }, { true: 'بعد ' + C.HINT_SECONDS + ' ثانية', false: 'تحدّي' }))
+        : h('div', { class: 'lg-rules' }, h('b', null, 'قواعد الغرفة'), h('span', null, o.size + ' كرت · الكمبيوتر ' + C.LEVEL_NAMES[o.level] + (o.hint === false ? ' · بلا تلميح' : ' · بتلميح'))),
       h('div', { class: 'lg-lobbyrow' }, h('button', { class: 'with-icon', onclick: function () { S.sheet = 'help'; render(); } }, icon('help', 20), 'طريقة اللعب'), reactButton('boxed')),
       S.reacts ? reactRow() : null,
       h('div', { class: 'grow' }),
@@ -349,6 +357,7 @@
     const lead = order[0].count;
     const flash = S.flash && v.last && S.flash.symbol === v.last.symbol ? S.flash : null;
     const frozen = now < S.frozenUntil;
+    const hint = v.phase === 'play' && v.options.hint !== false && S.cardAt && now - S.cardAt >= C.HINT_SECONDS * 1000 ? common(v.mine, v.center) : -1;
     const top = h('header', { class: 'lg-top' },
       h('span', { class: 'brand' }, 'لقطة!'),
       h('div', { class: 'lg-progress', 'aria-label': 'باقي ' + v.left + ' كرت' },
@@ -375,10 +384,10 @@
     } else if (v.phase === 'between') {
       center = h('div', { class: 'lg-slot center' }, cardEl(null, { cls: 'middle' }));
     } else {
-      center = h('div', { class: 'lg-slot center' }, cardEl(v.center, { cls: 'middle arriving', tap: !frozen }));
+      center = h('div', { class: 'lg-slot center' }, cardEl(v.center, { cls: 'middle arriving', tap: !frozen, hint: hint }));
     }
     const mineCard = h('div', { class: 'lg-slot mine' + (frozen ? ' frozen' : '') },
-      cardEl(v.mine, { cls: 'mine' + (v.phase === 'between' && v.last && isMe(v.last.playerId) ? ' fresh' : ''), tap: v.phase === 'play' && !frozen, flash: v.phase === 'between' && v.last && isMe(v.last.playerId) ? v.last.symbol : undefined }),
+      cardEl(v.mine, { cls: 'mine' + (v.phase === 'between' && v.last && isMe(v.last.playerId) ? ' fresh' : ''), tap: v.phase === 'play' && !frozen, hint: hint, flash: v.phase === 'between' && v.last && isMe(v.last.playerId) ? v.last.symbol : undefined }),
       frozen ? h('div', { class: 'lg-freeze' }, h('b', null, '❄'), h('span', null, 'غلط! انتظر لحظة')) : null);
     return h('div', { class: 'lg-app' },
       top, chips,

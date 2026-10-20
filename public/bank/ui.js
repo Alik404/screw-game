@@ -57,6 +57,7 @@
     clock: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9.5 2.5h5"/>',
     card: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
+    share: '<circle cx="17.5" cy="5.5" r="2.5"/><circle cx="6.5" cy="12" r="2.5"/><circle cx="17.5" cy="18.5" r="2.5"/><path d="M8.7 10.8l6.6-4M8.7 13.2l6.6 4"/>',
     minus: '<path d="M5 12h14"/>',
     close: '<path d="M6 6l12 12M18 6L6 18"/>',
     sound: '<path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>',
@@ -268,7 +269,7 @@
       const owned = Object.keys(view.props).filter(function (i) { return view.props[i].owner === id; }).length;
       return h('div', {
         class: 'bk-pl' + (id === cur ? ' cur' : '') + (p.bankrupt ? ' out' : '') + (id === view.you ? ' me' : ''),
-        role: 'listitem', style: { '--pc': 'var(--p' + playerIndex(view, id) + ')' },
+        role: 'listitem', 'data-seat': id, style: { '--pc': 'var(--p' + playerIndex(view, id) + ')' },
       },
         h('span', { class: 'bk-av' }, tokens && tokens[id] ? tokenIcon(tokens[id]) : Array.from(names[id] || '؟')[0]),
         h('div', { class: 'bk-plinfo' },

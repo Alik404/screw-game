@@ -73,7 +73,8 @@
     names: {},
     result: null,
     hideResult: false,
-    rounds: C.DEFAULT_ROUNDS,
+    rounds: C.ROUNDS_OPTIONS.indexOf(store('seven.rounds')) >= 0 ? store('seven.rounds') : C.DEFAULT_ROUNDS,
+    optsSent: null,
     sheet: null, // null | menu | color | scores
     pendingPlay: null, // {kind: 'play'|'play_drawn', card?}
     eventText: '',
@@ -172,7 +173,16 @@
         break;
       case 'room_state':
         S.room = m;
+        m.players.forEach(function (p) { S.names[p.id] = p.name; });
+        // the host shares the number of rounds remembered on this device, so everyone sees it
+        if (m.phase === 'lobby' && m.hostId === S.you && !m.options && S.optsSent !== m.code) {
+          S.optsSent = m.code;
+          sendRaw({ type: 'set_options', options: { rounds: S.rounds } });
+        }
         break;
+      case 'reaction':
+        window.Reactions.show(m.from, m.id);
+        return;
       case 'game_state':
         onGameState(m);
         break;
@@ -210,7 +220,8 @@
     S.newIds = prevIds ? m.hand.map(function (c) { return c.id; }).filter(function (id) { return prevIds.indexOf(id) < 0; }) : [];
     S.names = {};
     m.players.forEach(function (p) { S.names[p.id] = p.name; });
-    S.timerEnd = m.timer ? m.timer.endsAt - (m.timer.now - Date.now()) : null;
+    // a computer player's short pause is not a countdown anyone needs to see
+    S.timerEnd = m.timer && m.timer.kind !== 'bot' ? m.timer.endsAt - (m.timer.now - Date.now()) : null;
     if (m.phase !== 'roundOver') S.hideResult = false;
     if (m.phase === 'turn' && m.currentPlayerId === m.you && (!prev || prev.currentPlayerId !== m.you || prev.round !== m.round)) {
       SND.play('turn');
@@ -479,10 +490,18 @@
 
   const AVATARS = ['av-1', 'av-2', 'av-3', 'av-4', 'av-5', 'av-6'];
 
+  function roomRounds() { return (S.room && S.room.options && S.room.options.rounds) || S.rounds; }
+  function setRounds(n) {
+    S.rounds = n;
+    store('seven.rounds', n);
+    send({ type: 'set_options', options: { rounds: n } });
+  }
+
   function lobbyScreen() {
     const r = S.room;
     const amHost = r.hostId === S.you;
     const present = r.players.filter(function (p) { return p.connected; }).length;
+    const rounds = roomRounds();
     return h('div', { class: 'screen lobby' },
       h('div', { class: 'lobby-head' },
         h('div', { class: 'dim center' }, 'كود الغرفة'),
@@ -490,21 +509,25 @@
         h('button', { class: 'with-icon', onclick: function () { share(r.code); } }, icon('share', 20), 'مشاركة الرابط')),
       h('div', { class: 'dim' }, 'اللاعبون (' + r.players.length + '/' + C.MAX_PLAYERS + ')'),
       h('ul', { class: 'plist' }, r.players.map(function (p, i) {
-        return h('li', { class: p.connected ? '' : 'off' },
-          h('span', { class: 'avatar ' + AVATARS[i % AVATARS.length] }, Array.from(p.name)[0] || '؟'),
+        return h('li', { class: p.connected ? '' : 'off', 'data-chip': p.id },
+          h('span', { class: 'avatar ' + AVATARS[i % AVATARS.length] }, p.bot ? '🤖' : (Array.from(p.name)[0] || '؟')),
           h('span', { class: 'pname' }, p.name + (p.id === S.you ? ' (أنت)' : ''), p.connected ? null : h('small', null, ' غير متصل')),
-          p.isHost ? h('span', { class: 'tag' }, 'المضيف') : null);
+          p.isHost ? h('span', { class: 'tag' }, 'المضيف') : null,
+          p.bot && amHost ? h('button', { class: 'icon-btn lob-rm', 'aria-label': 'احذف ' + p.name, onclick: function () { send({ type: 'remove_bot', id: p.id }); } }, icon('close', 20)) : null);
       })),
+      amHost && r.players.length < C.MAX_PLAYERS ? h('button', { class: 'with-icon', onclick: function () { send({ type: 'add_bot' }); } }, '🤖', ' أضف لاعب كمبيوتر') : null,
       amHost ? h('div', { class: 'sv-roundspick' },
         h('div', { class: 'dim small' }, 'عدد الجولات'),
         h('div', { class: 'sv-rounds' }, C.ROUNDS_OPTIONS.map(function (n) {
-          return h('button', { 'aria-pressed': S.rounds === n ? 'true' : 'false', onclick: function () { S.rounds = n; render(); } }, n + ' جولات');
-        }))) : null,
+          return h('button', { 'aria-pressed': rounds === n ? 'true' : 'false', onclick: function () { setRounds(n); } }, n + ' جولات');
+        })))
+        : h('div', { class: 'sv-note' }, 'المضيف اختار ', h('b', null, rounds + ' جولات')),
+      h('div', { class: 'lob-row' }, window.Reactions.button()),
       h('div', { class: 'sv-note' }, 'كل لاعب يبدأ بـ ' + C.HAND_SIZE + ' كروت. أول من يخلص كروته يفوز بالجولة، والأعلى نقاطاً في النهاية يفوز.'),
       h('div', { class: 'grow' }),
       amHost
-        ? [present < C.MIN_PLAYERS ? h('div', { class: 'center dim' }, 'بانتظار لاعب واحد على الأقل…') : null,
-          h('button', { class: 'primary big', disabled: present < C.MIN_PLAYERS, onclick: function () { send({ type: 'start_game', options: { rounds: S.rounds } }); } }, 'ابدأ')]
+        ? [present < C.MIN_PLAYERS ? h('div', { class: 'center dim' }, 'أرسل الرابط لأصدقائك أو أضف لاعب كمبيوتر.') : null,
+          h('button', { class: 'primary big', disabled: present < C.MIN_PLAYERS, onclick: function () { send({ type: 'start_game', options: { rounds: rounds } }); } }, 'ابدأ')]
         : h('div', { class: 'center dim' }, 'بانتظار المضيف ليبدأ اللعبة…'),
       h('a', { class: 'all-games', href: '/' }, 'كل الألعاب'));
   }
@@ -536,6 +559,7 @@
       h('span', { class: 'sv-timer' + (left !== null && left <= 10 ? ' low' : ''), id: 'sv-timer' },
         left === null ? null : [icon('clock', 18), h('span', { class: 'num' }, '0:' + String(left).padStart(2, '0'))]),
       h('span', null, 'جولة ' + v.round + '/' + v.rounds,
+        window.Reactions.button(),
         h('button', { class: 'icon-btn', 'aria-label': 'القائمة', onclick: function () { S.sheet = 'menu'; render(); } }, icon('menu'))));
 
     const opps = h('div', { class: 'sv-opps' }, others.map(function (p) {
@@ -736,6 +760,11 @@
     if (e.key === 'Escape' && S.sheet) closeSheet();
   });
 
+  window.Reactions.init({
+    send: function (msg) { sendRaw(msg); },
+    nameOf: function (id) { return id === S.you ? 'أنت' : nm(id); },
+    anchorFor: function (id) { return document.querySelector('[data-seat="' + id + '"]') || document.querySelector('[data-chip="' + id + '"]') || (id === S.you ? document.querySelector('.sv-mine') : null); },
+  });
   render();
   connect();
 })();

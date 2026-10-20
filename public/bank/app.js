@@ -137,6 +137,9 @@
       case 'room_state':
         S.room = m;
         break;
+      case 'reaction':
+        window.Reactions.show(m.from, m.id);
+        return;
       case 'game_state':
         onGameState(m);
         break;
@@ -413,7 +416,7 @@
       h('div', { class: 'bk-tokgrid' }, C.TOKENS.map(function (t) {
         const owner = r.players.find(function (p) { return p.token === t; });
         const isMine = owner && owner.id === S.you;
-        const taken = owner && !isMine;
+        const taken = owner && !isMine && !owner.bot; // a computer player's piece is swapped, not taken
         return h('button', {
           class: 'bk-tokpick' + (isMine ? ' on' : ''), disabled: taken, 'aria-pressed': isMine ? 'true' : 'false',
           style: { '--pc': 'var(--p' + ((isMine ? myIndex : owner ? r.players.indexOf(owner) : myIndex) + 1) + ')' },
@@ -431,20 +434,23 @@
       h('div', { class: 'lobby-head' },
         h('div', { class: 'dim center' }, 'كود الغرفة'),
         h('div', { class: 'code-box', dir: 'ltr' }, r.code),
-        h('button', { class: 'with-icon', onclick: function () { share(r.code); } }, U.icon('plus', 20), 'مشاركة الرابط')),
+        h('button', { class: 'with-icon', onclick: function () { share(r.code); } }, U.icon('share', 20), 'مشاركة الرابط')),
       h('div', { class: 'dim' }, 'اللاعبون (' + r.players.length + '/' + C.MAX_PLAYERS + ')'),
       h('ul', { class: 'plist' }, r.players.map(function (p, i) {
-        return h('li', { class: p.connected ? '' : 'off' },
+        return h('li', { class: p.connected ? '' : 'off', 'data-chip': p.id },
           h('span', { class: 'bk-av', style: { '--pc': 'var(--p' + (i + 1) + ')' } }, p.token ? U.tokenIcon(p.token) : (Array.from(p.name)[0] || '؟')),
-          h('span', { class: 'pname' }, p.name + (p.id === S.you ? ' (أنت)' : ''), p.connected ? null : h('small', null, ' غير متصل')),
-          p.isHost ? h('span', { class: 'tag' }, 'المضيف') : null);
+          h('span', { class: 'pname' }, (p.bot ? '🤖 ' : '') + p.name + (p.id === S.you ? ' (أنت)' : ''), p.connected ? null : h('small', null, ' غير متصل')),
+          p.isHost ? h('span', { class: 'tag' }, 'المضيف') : null,
+          p.bot && amHost ? h('button', { class: 'icon-btn lob-rm', 'aria-label': 'احذف ' + p.name, onclick: function () { send({ type: 'remove_bot', id: p.id }); } }, U.icon('close', 20)) : null);
       })),
+      amHost && r.players.length < C.MAX_PLAYERS ? h('button', { class: 'with-icon', onclick: function () { send({ type: 'add_bot' }); } }, '🤖', ' أضف لاعب كمبيوتر') : null,
       tokenPicker(r),
+      h('div', { class: 'lob-row' }, window.Reactions.button()),
       h('div', { class: 'bk-lobby-note dim small' },
         'كل لاعب يبدأ بـ ' + U.money(C.START_CASH) + '. اللعبة حتى يبقى لاعب واحد، أو ينهيها المضيف فيفوز الأغنى.'),
       h('div', { class: 'grow' }),
       amHost
-        ? [present < C.MIN_PLAYERS ? h('div', { class: 'center dim' }, 'بانتظار لاعب واحد على الأقل…') : null,
+        ? [present < C.MIN_PLAYERS ? h('div', { class: 'center dim' }, 'أرسل الرابط لأصدقائك أو أضف لاعب كمبيوتر.') : null,
           h('button', { class: 'primary big', disabled: present < C.MIN_PLAYERS, onclick: function () { send({ type: 'start_game' }); } }, 'ابدأ')]
         : h('div', { class: 'center dim' }, 'بانتظار المضيف ليبدأ اللعبة…'),
       h('a', { class: 'all-games', href: '/' }, 'كل الألعاب'));
@@ -506,11 +512,14 @@
     } else {
       content = U.actionPanel(ctx);
     }
-    const left = secondsOf(primaryKind());
+    // a computer player's short pause is not a countdown anyone needs to see
+    const pk = primaryKind();
+    const left = pk && pk.indexOf('bot') !== 0 ? secondsOf(pk) : null;
     const top = h('header', { class: 'bk-top' },
       h('span', { class: 'brand' }, 'بنك الحظ'),
       h('span', { class: 'timer', id: 'bk-timer' }, left === null ? null : [U.icon('clock', 18), h('span', { class: 'num' }, '0:' + String(left).padStart(2, '0'))]),
       h('span', { class: 'bk-topr' }, S.room ? 'الغرفة ' + S.room.code : '',
+        window.Reactions.button(),
         h('button', { class: 'icon-btn', 'aria-label': 'القائمة', onclick: function () { S.sheet = 'menu'; render(); } }, U.icon('menu'))));
     return h('div', { class: 'bk-app' },
       top,
@@ -661,6 +670,11 @@
     if (e.key === 'Escape' && S.sheet) { S.sheet = null; render(); }
   });
 
+  window.Reactions.init({
+    send: function (msg) { sendRaw(msg); },
+    nameOf: function (id) { return id === S.you ? 'أنت' : (S.names[id] || '؟'); },
+    anchorFor: function (id) { return document.querySelector('[data-seat="' + id + '"]') || document.querySelector('[data-chip="' + id + '"]'); },
+  });
   render();
   connect();
 })();

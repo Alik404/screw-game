@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b2529">
+<title>ما في إنترنت</title>
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/tokens.css">
+<style>
+  html, body { margin: 0; height: 100%; }
+  body { font-family: var(--font); color: var(--text); background: radial-gradient(ellipse at 50% 40%, var(--table-glow), var(--table) 72%); display: grid; place-items: center; text-align: center; padding: 24px; box-sizing: border-box; }
+  img { width: 112px; height: 112px; border-radius: 26px; box-shadow: var(--shadow); }
+  h1 { font-family: var(--font-display); font-weight: 400; color: var(--brass); font-size: var(--fs-5); margin: 18px 0 6px; }
+  p { color: var(--text-dim); line-height: 1.7; margin: 0 0 22px; font-size: var(--fs-3); }
+  button { font: inherit; font-size: var(--fs-3); font-weight: 700; min-height: 52px; padding: 0 28px; border: 0; border-radius: var(--r-btn); background: var(--brass); color: var(--ink); cursor: pointer; }
+</style>
+</head>
+<body>
+<main>
+  <img src="/icons/icon.svg" alt="">
+  <h1>ما في إنترنت</h1>
+  <p>تأكد من الواي فاي أو بيانات الموبايل، وارجع حاول.<br>الألعاب تحتاج اتصال حتى تلعب ويا أصدقائك.</p>
+  <button type="button" onclick="location.reload()">حاول مرة ثانية</button>
+</main>
+<script>window.addEventListener('online', function () { location.reload(); });</script>
+</body>
+</html>

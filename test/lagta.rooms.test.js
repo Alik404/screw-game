@@ -62,7 +62,7 @@ test('lagta room: up to 8 players, options, the countdown starts the first card'
   L.host.say({ type: 'start_game' });
   const s = stateOf(L.others[0]);
   assert.equal(s.phase, 'countdown');
-  assert.deepEqual(s.options, { size: 20, level: 'hard' });
+  assert.deepEqual(s.options, { size: 20, level: 'hard', hint: true });
   L.h.clock.advance(C.COUNTDOWN_SECONDS * 1000);
   assert.equal(stateOf(L.host).phase, 'play');
   assert.ok(stateOf(L.host).center !== null);

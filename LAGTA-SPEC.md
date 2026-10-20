@@ -8,15 +8,16 @@
 - **سباق:** أول من يضغط الرمز المشترك بين كرته وكرت الوسط **يأخذ كرت الوسط**، ويصير هو كرته الجديد. الخادم هو الحكم: أول ضغطة صحيحة تصله تفوز.
 - **ضغطة غلط** تجمّد اللاعب **ثانيتين** (بختم وقت الخادم).
 - بعد كل لقطة 1.4 ثانية (الكرت يطير لصاحبه) ثم الكرت التالي. كرت ما لقطه أحد خلال 45 ثانية ينشال.
+- **التلميح** (خيار للمضيف، شغّال افتراضياً): إذا بقي كرت الوسط **12 ثانية** (`HINT_SECONDS`) بلا لقطة يلمع الرمز المشترك على كرتك وكرت الوسط. "بلا تلميح" للتحدي. العميل يحسب الرمز من كرتيه، فلا رسالة إضافية.
 - لما تخلص الكومة يفوز صاحب أكثر كروت (والمتعادلون معاً).
 - 2 إلى 8 لاعبين، ولاعبو الكمبيوتر بثلاث سرعات: سهل (4.5–8 ث)، عادي (2.6–5 ث)، صعب (1.3–2.6 ث).
 
 ## الرسائل
-`claim {symbol}`، و`set_options {size, level}`. الأحداث: `countdown`, `card {center, left}`, `claim {playerId, symbol, card, count}`, `miss {playerId, symbol, ms}`, `skip`, `game_over`.
+`claim {symbol}`، و`set_options {size, level, hint}`. الأحداث: `countdown`, `card {center, left}`, `claim {playerId, symbol, card, count}`, `miss {playerId, symbol, ms}`, `skip`, `game_over`.
 لا أسرار إلا ترتيب الكومة.
 
 ## الملفات
-`server/games/lagta/{config,engine}.js`، `public/lagta.html`، `public/lagta/{app.js, lagta.css}`، `test/lagta.engine.test.js` (6) و`test/lagta.rooms.test.js` (3).
+`server/games/lagta/{config,engine}.js`، `public/lagta.html`، `public/lagta/{app.js, lagta.css}`، `test/lagta.engine.test.js` (7) و`test/lagta.rooms.test.js` (3).
 
 ## الشكل
 - كروت دائرية كريمية بإطار ذهبي وخط منقّط داخلي وظل ناعم، والرموز إيموجي بأحجام وميلانات مختلفة (ثابتة لكل كرت من رقمه). خلفية بتوهّجين ملوّنين.

@@ -157,3 +157,8 @@ body:has(.lg-app), body:has(.lg-shell) {
 .lg-helpart { display: flex; justify-content: center; gap: var(--s3); }
 .lg-helpart .lg-card { --cs: 130px; }
 .help-list { margin: 0; padding-inline-start: var(--s4); display: flex; flex-direction: column; gap: var(--s3); line-height: 1.7; }
+
+/* the hint: the shared symbol glows on both cards */
+.lg-sym.hint { background: radial-gradient(circle, color-mix(in srgb, var(--brass) 55%, transparent), transparent 70%); animation: lg-hint 1.1s ease-in-out infinite; }
+@keyframes lg-hint { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--brass) 70%, transparent); } 50% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--brass) 0%, transparent); transform: translate(-50%, -50%) rotate(var(--rot)) scale(calc(var(--k) * 1.12)); } }
+@media (prefers-reduced-motion: reduce) { .lg-sym.hint { animation: none; box-shadow: 0 0 0 4px var(--brass); } }

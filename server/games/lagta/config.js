@@ -23,6 +23,8 @@
     BOT_DELAYS: { easy: [4.5, 8], normal: [2.6, 5], hard: [1.3, 2.6] }, // seconds, random within the range
 
     FREEZE_MS: 2000, // a wrong tap freezes you this long
+    HINT_SECONDS: 12, // with hints on, the shared symbol starts to glow when nobody found it this long
+    DEFAULT_HINT: true,
     COUNTDOWN_SECONDS: 3, // 3, 2, 1 before the first card
     BETWEEN_SECONDS: 1.4, // the won card flies to its winner before the next one shows
     STUCK_SECONDS: 45, // nobody found it: the card is put aside

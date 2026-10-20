@@ -167,6 +167,7 @@
       h('div', { class: 'tb-timer' + (left !== null && left <= 10 ? ' low' : ''), id: 'timer' },
         left === null ? null : [icon('clock', 18), h('span', { class: 'num' }, fmtTime(left))]),
       h('div', { class: 'tb-btns' },
+        window.Reactions ? window.Reactions.button() : null,
         h('button', { class: 'icon-btn help-btn', onclick: api.toggleHelp, 'aria-label': 'طريقة اللعب' }, icon('help')),
         h('button', { class: 'icon-btn', onclick: function () { api.openSheet('scores'); }, 'aria-label': 'جدول النقاط' }, icon('table')),
         h('button', { class: 'icon-btn', onclick: function () { api.openSheet('menu'); }, 'aria-label': 'القائمة' }, icon('menu'))));

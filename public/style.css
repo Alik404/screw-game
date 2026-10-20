@@ -309,3 +309,19 @@ body.help-open .help-backdrop { opacity: 1; pointer-events: auto; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+
+/* ---------- quick reactions (reactions.js) and lobby bits shared by the card and bank games ---------- */
+.rx-pop { position: fixed; z-index: 90; display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; padding: 4px; background: var(--table-deep);
+  border: 1.5px solid var(--table-glow); border-radius: var(--r-btn); box-shadow: var(--shadow); animation: fade-in .15s; }
+.rx-pop button { border: 0; min-width: 40px; min-height: 40px; padding: 0; font-size: 24px; line-height: 1; border-radius: 50%; }
+.rx-pop button:hover { background: var(--table); }
+.rx-bubble { position: fixed; z-index: 88; pointer-events: none; display: flex; flex-direction: column; align-items: center; transform: translate(-50%, 0); animation: rx-float 2.2s ease-out forwards; }
+.rx-bubble span { font-size: 44px; line-height: 1; filter: drop-shadow(0 4px 6px color-mix(in srgb, var(--ink) 60%, transparent)); }
+.rx-bubble small { font-size: var(--fs-1); font-weight: 700; color: var(--text); background: var(--table-deep); border-radius: 999px; padding: 0 var(--s2); margin-top: 2px; }
+@keyframes rx-float { 0% { transform: translate(-50%, 30px) scale(.4); opacity: 0; } 15% { transform: translate(-50%, 0) scale(1.15); opacity: 1; } 75% { opacity: 1; } 100% { transform: translate(-50%, -60px); opacity: 0; } }
+.lob-row { display: flex; justify-content: center; }
+.lob-row .rx-btn { border: 1.5px solid var(--brass); border-radius: var(--r-btn); width: 48px; }
+.lob-rm { margin-inline-start: auto; width: 40px; min-height: 40px; }
+.plist .tag + .lob-rm { margin-inline-start: var(--s1); }
+/* the reaction button keeps its icon size in every top bar */
+button.icon-btn.rx-btn svg { width: 22px; height: 22px; flex: none; }

@@ -720,6 +720,7 @@
     const s = {
       rng: opts.seed === undefined ? randomSeed() : opts.seed >>> 0,
       playerIds: playerIds.slice(),
+      bots: Array.isArray(opts.bots) ? opts.bots.filter(function (id) { return playerIds.indexOf(id) >= 0; }) : [],
       players: {},
       props: {},
       current: 0,
@@ -824,6 +825,209 @@
     });
   }
 
+  // ---------- computer players ----------
+  // Everything in this game is public, so a computer player sees what any player sees.
+
+  const RESERVE = 150; // cash a computer player keeps in hand for rent
+
+  // how much of i's group pid owns, and how much of it the others own
+  function groupInfo(s, pid, i) {
+    const sq = SQ[i];
+    if (sq.type !== 'property') return null;
+    const g = B.groupSquares(sq.group);
+    const by = {};
+    let mine = 0;
+    let free = 0;
+    g.forEach(function (k) {
+      if (k === i) return;
+      const o = s.props[k].owner;
+      if (o === pid) mine += 1;
+      else if (o === null) free += 1;
+      else by[o] = (by[o] || 0) + 1;
+    });
+    const maxOther = Object.keys(by).reduce(function (m, k) { return Math.max(m, by[k]); }, 0);
+    return { size: g.length, mine: mine, free: free, maxOther: maxOther, others: g.length - 1 - mine - free };
+  }
+
+  // what square i is worth to pid: more if it completes (or nearly completes) pid's set, or blocks someone else's
+  function botValue(s, pid, i) {
+    const sq = SQ[i];
+    let v = sq.price;
+    const gi = groupInfo(s, pid, i);
+    if (gi) {
+      if (gi.others === 0 && gi.mine === gi.size - 1) v *= 1.8;
+      else if (gi.others === 0 && gi.mine > 0) v *= 1.3;
+      if (gi.maxOther === gi.size - 1) v *= 1.5;
+    } else if (sq.type === 'station') {
+      v *= 1 + 0.25 * countOwned(s, pid, 'station');
+    }
+    return Math.round(v);
+  }
+
+  function canBuildNow(s, pid, i) {
+    const sq = SQ[i];
+    const pr = s.props[i];
+    if (sq.type !== 'property' || pr.owner !== pid || !ownsGroup(s, pid, sq.group)) return false;
+    const group = B.groupSquares(sq.group);
+    if (group.some(function (g) { return s.props[g].mortgaged; })) return false;
+    if (pr.houses >= CONFIG.HOUSES_BEFORE_HOTEL + 1) return false;
+    if (pr.houses > Math.min.apply(null, group.map(function (g) { return s.props[g].houses; }))) return false;
+    if (s.players[pid].cash - sq.houseCost < RESERVE) return false;
+    return pr.houses === CONFIG.HOUSES_BEFORE_HOTEL ? s.bankHotels > 0 : s.bankHouses > 0;
+  }
+
+  // a set it lacks one square of: offer cash for that square (one offer at a time, and not the same square
+  // again for a while, so nobody is pestered)
+  function botOffer(ctx, pid) {
+    const s = ctx.s;
+    if (s.trade) return;
+    const p = s.players[pid];
+    s.botAsked = s.botAsked || {};
+    for (let g = 1; g <= 8; g++) {
+      const missing = B.groupSquares(g).filter(function (i) { return s.props[i].owner !== pid; });
+      if (missing.length !== 1) continue;
+      const i = missing[0];
+      const owner = s.props[i].owner;
+      if (owner === null || s.players[owner].bankrupt) continue;
+      const key = pid + ':' + i;
+      if (s.botAsked[key] !== undefined && s.turnCount - s.botAsked[key] < 12) continue;
+      const offer = Math.round((SQ[i].price * 1.8) / 10) * 10 + 20;
+      if (p.cash - offer < RESERVE) continue;
+      s.botAsked[key] = s.turnCount;
+      if (!H.trade_offer(ctx, pid, { to: owner, give: { cash: offer }, get: { props: [i] } })) return;
+    }
+  }
+
+  // after its roll: buy back mortgages when rich, then build evenly on its sets (best rent first)
+  function botManage(ctx, pid) {
+    const s = ctx.s;
+    const p = s.players[pid];
+    botOffer(ctx, pid);
+    ownedBy(s, pid).filter(function (i) { return s.props[i].mortgaged; }).forEach(function (i) {
+      if (p.cash - unmortgageCost(i) >= RESERVE * 3) H.unmortgage(ctx, pid, { square: i });
+    });
+    for (let k = 0; k < 15; k++) {
+      const can = ownedBy(s, pid).filter(function (i) { return canBuildNow(s, pid, i); });
+      if (!can.length) break;
+      can.sort(function (a, b) { return s.props[a].houses - s.props[b].houses || SQ[b].houseCost - SQ[a].houseCost; });
+      if (H.build(ctx, pid, { square: can[0] })) break;
+    }
+  }
+
+  // raise money for a debt: sell buildings (evenly), then mortgage the least useful squares first
+  function botRaise(ctx, pid, need) {
+    const s = ctx.s;
+    const p = s.players[pid];
+    for (let guard = 0; guard < 80 && p.cash < need; guard++) {
+      const built = ownedBy(s, pid).filter(function (i) { return s.props[i].houses > 0; });
+      if (!built.length) break;
+      built.sort(function (a, b) { return s.props[b].houses - s.props[a].houses || SQ[b].houseCost - SQ[a].houseCost; });
+      let sold = false;
+      for (let k = 0; k < built.length && !sold; k++) sold = !H.sell_building(ctx, pid, { square: built[k] });
+      if (!sold) break;
+    }
+    const rank = function (i) {
+      const sq = SQ[i];
+      if (sq.type === 'property' && ownsGroup(s, pid, sq.group)) return 3;
+      if (sq.type === 'station') return 2;
+      if (sq.type === 'utility') return 1;
+      return 0;
+    };
+    ownedBy(s, pid).filter(function (i) { return !s.props[i].mortgaged && !hasBuildingsAt(s, i); })
+      .sort(function (a, b) { return rank(a) - rank(b) || SQ[a].price - SQ[b].price; })
+      .forEach(function (i) { if (p.cash < need) H.mortgage(ctx, pid, { square: i }); });
+  }
+
+  function botStep(ctx) {
+    const s = ctx.s;
+    if (s.stage === 'debt') {
+      const d = s.debts[0];
+      if (s.bots.indexOf(d.debtor) < 0) return ERR.notDebtor;
+      botRaise(ctx, d.debtor, d.amount);
+      if (s.players[d.debtor].cash >= d.amount) return H.pay_debt(ctx, d.debtor);
+      return H.declare_bankruptcy(ctx, d.debtor);
+    }
+    const pid = curId(s);
+    if (s.bots.indexOf(pid) < 0) return ERR.notYourTurn;
+    const p = s.players[pid];
+    switch (s.stage) {
+      case 'roll': {
+        if (p.inJail) {
+          const free = Object.keys(s.props).filter(function (k) { return s.props[k].owner === null; }).length;
+          if (p.jailCards.length && free > 6) H.use_jail_card(ctx, pid);
+          else if (free > 8 && p.cash >= CONFIG.JAIL_FINE + RESERVE) H.pay_jail(ctx, pid);
+        }
+        return H.roll(ctx, pid);
+      }
+      case 'buy': {
+        const i = s.pending.square;
+        const price = SQ[i].price;
+        const keep = botValue(s, pid, i) > price * 1.2 ? 40 : RESERVE;
+        return p.cash - price >= keep ? H.buy(ctx, pid) : H.decline(ctx, pid);
+      }
+      case 'postRoll':
+        botManage(ctx, pid);
+        return H.end_turn(ctx, pid);
+      default:
+        return ERR.wrongStage;
+    }
+  }
+
+  // is there a computer player that wants this decision? (its turn, or a debt it owes)
+  function botWaiting(s) {
+    if (s.phase !== 'turn' || !s.bots || !s.bots.length) return false;
+    if (s.stage === 'debt') return s.debts.length > 0 && s.bots.indexOf(s.debts[0].debtor) >= 0;
+    return ['roll', 'buy', 'postRoll'].indexOf(s.stage) >= 0 && s.bots.indexOf(curId(s)) >= 0;
+  }
+
+  function botAct(state) {
+    if (!botWaiting(state)) return { error: ERR.wrongStage };
+    return run(state, botStep);
+  }
+
+  // which computer player would raise the bid now, and to how much
+  function botBidFor(s) {
+    if (s.phase !== 'turn' || s.stage !== 'auction' || !s.auction || !s.bots) return null;
+    const au = s.auction;
+    const min = au.bid ? au.bid + CONFIG.AUCTION_MIN_INCREMENT : CONFIG.AUCTION_MIN_INCREMENT;
+    let best = null;
+    s.bots.forEach(function (id) {
+      const p = s.players[id];
+      if (p.bankrupt || au.bidder === id) return;
+      const cap = Math.min(botValue(s, id, au.square), p.cash - RESERVE / 2);
+      if (cap < min) return;
+      if (!best || cap - min > best.cap - min) best = { id: id, cap: cap };
+    });
+    if (!best) return null;
+    const open = Math.max(CONFIG.AUCTION_MIN_INCREMENT, Math.round((SQ[au.square].price * 0.3) / 10) * 10);
+    const amount = Math.floor(Math.min(best.cap, au.bid ? au.bid + CONFIG.AUCTION_MIN_INCREMENT * (au.seq % 3 === 0 ? 2 : 1) : open));
+    return amount >= min ? { id: best.id, amount: amount } : null;
+  }
+
+  function botBid(state) {
+    const b = botBidFor(state);
+    if (!b) return { error: ERR.wrongStage };
+    return run(state, function (ctx) { return H.bid(ctx, b.id, { amount: b.amount }); });
+  }
+
+  // a trade offered to a computer player: accepted only when it gains clearly more than it gives
+  function sideValue(s, side, viewer) {
+    let v = side.cash + side.jailCards * 50;
+    side.props.forEach(function (i) { v += botValue(s, viewer, i) * (s.props[i].mortgaged ? 0.5 : 1); });
+    return v;
+  }
+
+  function botTrade(state) {
+    const t = state.trade;
+    if (!t || !state.bots || state.bots.indexOf(t.to) < 0) return { error: ERR.noTrade };
+    return run(state, function (ctx) {
+      const s = ctx.s;
+      const gets = sideValue(s, t.give, t.to);
+      const loses = Math.max(sideValue(s, t.get, t.to), sideValue(s, t.get, t.from) * 0.85);
+      return gets >= loses * 1.1 + 10 ? H.trade_accept(ctx, t.to) : H.trade_reject(ctx, t.to);
+    });
+  }
+
   // The host ends the game early: the richest (cash + property + buildings) wins.
   function endGameEarly(state) {
     if (state.phase !== 'turn') return { error: ERR.gameOver };
@@ -857,6 +1061,6 @@
 
   return {
     ERR, createGame, act, autoPlay, closeAuction, expireTrade, endGameEarly, viewFor,
-    rentFor, netWorth, unmortgageCost,
+    rentFor, netWorth, unmortgageCost, botAct, botWaiting, botBid, botBidFor, botTrade, botValue,
   };
 });

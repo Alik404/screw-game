@@ -282,6 +282,7 @@
       rng: opts.seed === undefined ? randomSeed() : opts.seed >>> 0,
       idRng: opts.idSeed === undefined ? randomSeed() : opts.idSeed >>> 0,
       playerIds: playerIds.slice(),
+      bots: Array.isArray(opts.bots) ? opts.bots.filter(function (id) { return playerIds.indexOf(id) >= 0; }) : [],
       rounds: rounds,
       round: 1,
       totals: {},
@@ -432,6 +433,44 @@
     });
   }
 
+  // A computer player: gets rid of heavy cards first, keeps its wilds for later, and stops a player
+  // who is about to finish with a skip or a +2. Colours: the one it holds most of.
+  function botPlay(state) {
+    if (state.phase !== 'turn') return { error: ERR.wrongStage };
+    if (!state.bots || state.bots.indexOf(curId(state)) < 0) return { error: ERR.notYourTurn };
+    return run(state, function (ctx) {
+      const s = ctx.s;
+      const pid = curId(s);
+      const hand = s.hands[pid];
+      if (s.stage === 'color') return H.choose_color(ctx, pid, { color: mostCommonColor(hand, 'red') });
+      const playDrawn = function () {
+        const color = Deck.isWild(s.drawn) ? mostCommonColor(s.hands[pid], s.color) : undefined;
+        return H.play_drawn(ctx, pid, { color: color });
+      };
+      if (s.stage === 'drawn') return playDrawn();
+      const ok = hand.filter(function (c) { return playable(s, hand, c); });
+      if (!ok.length) {
+        const err = H.draw(ctx, pid);
+        if (err) return err;
+        return s.stage === 'drawn' ? playDrawn() : null;
+      }
+      const nextCount = s.hands[s.playerIds[nextIndex(s, 1)]].length;
+      const strong = mostCommonColor(hand, s.color);
+      const score = function (c) {
+        let v = c.value;
+        if (c.type === 'wild4') v = -40;
+        else if (c.type === 'wild') v = -30;
+        if (nextCount <= 2 && (c.type === 'draw2' || c.type === 'skip' || c.type === 'wild4' || (c.type === 'reverse' && s.playerIds.length === 2))) v += 80;
+        if (c.color === strong) v += 3;
+        return v;
+      };
+      ok.sort(function (a, b) { return score(b) - score(a); });
+      const card = ok[0];
+      const rest = hand.filter(function (c) { return c.id !== card.id; });
+      return H.play(ctx, pid, { card: card.id, color: Deck.isWild(card) ? mostCommonColor(rest, s.color) : undefined });
+    });
+  }
+
   // Everyone sees the table; only I see my own hand. Opponents are just counts.
   function viewFor(state, playerId) {
     const s = state;
@@ -450,7 +489,7 @@
       deckCount: s.deck.length,
       discardCount: s.discard.length,
       playerIds: s.playerIds.slice(),
-      players: s.playerIds.map(function (id) { return { id: id, count: s.hands[id].length }; }),
+      players: s.playerIds.map(function (id) { return { id: id, count: s.hands[id].length, bot: (s.bots || []).indexOf(id) >= 0 }; }),
       hand: clone(s.hands[playerId]),
       playable: myTurn && s.stage === 'play' ? playableIds(s, playerId) : [],
       drawn: myTurn && s.drawn ? clone(s.drawn) : null,
@@ -462,5 +501,5 @@
     };
   }
 
-  return { ERR, createGame, act, autoPlay, viewFor, playableIds, scoreHands };
+  return { ERR, createGame, act, autoPlay, botPlay, viewFor, playableIds, scoreHands };
 });

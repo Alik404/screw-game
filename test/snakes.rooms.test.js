@@ -99,10 +99,20 @@ test('computer players: host only, lobby only, unique names, up to the room size
   assert.equal(after.find((p) => p.id === bot.id).token, mine);
 });
 
-test('other games do not take computer players', () => {
-  const h = harness();
-  const host = h.conn().say({ type: 'create_room', name: 'أحمد', game: 'seven' });
-  assert.match(errOf(host.say({ type: 'add_bot' })), /لا تدعم/);
+test('every game takes computer players; a game without them refuses', () => {
+  const GAMES = require('../server/games');
+  Object.keys(GAMES).forEach((id) => {
+    const h = harness();
+    const host = h.conn().say({ type: 'create_room', name: 'أحمد', game: id });
+    host.say({ type: 'add_bot' });
+    assert.equal(host.last('room_state').players.filter((p) => p.bot).length, 1, id);
+  });
+  GAMES.seven.bots = false;
+  try {
+    const h = harness();
+    const host = h.conn().say({ type: 'create_room', name: 'أحمد', game: 'seven' });
+    assert.match(errOf(host.say({ type: 'add_bot' })), /لا تدعم/);
+  } finally { GAMES.seven.bots = true; }
 });
 
 test('one human and one computer player can play; start options reach the engine', () => {

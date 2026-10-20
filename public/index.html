@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0b2529">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="icon" href="/icons/icon-192.png" type="image/png" sizes="192x192">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ألعاب">
 <title>ألعاب الأصدقاء</title>
 <link rel="stylesheet" href="/tokens.css">
 <link rel="stylesheet" href="/cards.css">
@@ -22,36 +30,47 @@
 <main class="pt">
   <header class="pt-head">
     <h1>ألعاب الأصدقاء</h1>
-    <p>اختر لعبة، أنشئ غرفة، وأرسل الرابط لأصدقائك.</p>
+    <p>اختر لعبة، أنشئ غرفة، وأرسل الرابط لأصدقائك. وحدك؟ كل الألعاب تنلعب ضد الكمبيوتر.</p>
   </header>
 
-  <a class="pt-back" id="resume" href="/screw.html" hidden>
-    <span>عندك غرفة <b id="resume-game">سكرو</b> مفتوحة <b id="resume-code"></b></span>
-    <span class="go">العودة للغرفة</span>
-  </a>
+  <div class="pt-install" id="pt-install" hidden>
+    <img src="/icons/icon.svg" alt="" width="44" height="44">
+    <div class="txt"><b>ثبّت الألعاب على جهازك</b><span data-note>تفتح مثل التطبيق، بشاشة كاملة، من أيقونة على الشاشة الرئيسية.</span></div>
+    <button type="button" class="pt-ibtn" data-install>تثبيت</button>
+    <button type="button" class="pt-iclose" data-close aria-label="إخفاء">✕</button>
+  </div>
+
+  <div class="pt-resume" id="resume" hidden></div>
+
+  <nav class="pt-filters" aria-label="أنواع الألعاب">
+    <button type="button" aria-pressed="true" data-cat="all">الكل</button>
+    <button type="button" aria-pressed="false" data-cat="cards">ورق</button>
+    <button type="button" aria-pressed="false" data-cat="board">لوح ونرد</button>
+    <button type="button" aria-pressed="false" data-cat="quick">ذكاء وسرعة</button>
+  </nav>
 
   <section class="pt-games" aria-label="الألعاب">
-    <article class="pt-card" id="game-screw">
+    <article class="pt-card" id="game-screw" data-cat="cards">
       <div class="pt-art"><div class="pt-cards" id="screw-art" aria-hidden="true"></div></div>
       <div class="pt-title"><h2>سكرو</h2><span class="pt-tag live">متاحة الآن</span></div>
       <p class="pt-desc">لعبة ورق للذاكرة والجرأة: احفظ كروتك، بدّل وبصّر، وأعلن "سكرو" قبل الجميع. المجموع الأقل يفوز.</p>
-      <div class="pt-meta"><span>2 – 6 لاعبين</span><span>5 جولات</span><span>جوال وحاسوب</span></div>
+      <div class="pt-meta"><span>1 – 6 لاعبين</span><span>ضد الكمبيوتر</span><span>5 جولات</span></div>
       <div class="pt-actions">
         <a class="pt-btn primary" href="/screw.html">العب سكرو</a>
       </div>
     </article>
 
-    <article class="pt-card" id="game-seven">
+    <article class="pt-card" id="game-seven" data-cat="cards">
       <div class="pt-art"><div class="pt-seven" id="seven-art" aria-hidden="true"></div></div>
       <div class="pt-title"><h2>سبعة وسبعة</h2><span class="pt-tag live">متاحة الآن</span></div>
       <p class="pt-desc">لعبة ورق ملوّنة: طابق اللون أو الرقم، ومنع وعكس و+2 وجوكر. أول من يخلص كروته يفوز بالجولة.</p>
-      <div class="pt-meta"><span>2 – 6 لاعبين</span><span>3 أو 5 جولات</span><span>جوال وحاسوب</span></div>
+      <div class="pt-meta"><span>1 – 6 لاعبين</span><span>ضد الكمبيوتر</span><span>3 أو 5 جولات</span></div>
       <div class="pt-actions">
         <a class="pt-btn primary" href="/seven.html">العب سبعة وسبعة</a>
       </div>
     </article>
 
-    <article class="pt-card" id="game-bank">
+    <article class="pt-card" id="game-bank" data-cat="board">
       <div class="pt-art">
         <div class="pt-board" aria-hidden="true"></div>
         <div class="pt-token"></div><div class="pt-token b"></div>
@@ -59,13 +78,13 @@
       </div>
       <div class="pt-title"><h2>بنك الحظ</h2><span class="pt-tag live">متاحة الآن</span></div>
       <p class="pt-desc">لعبة عقارات في مناطق بغداد: ارمِ النرد، اشترِ الأراضي، ابنِ البيوت، زايد وتبادل، وأفلس خصومك.</p>
-      <div class="pt-meta"><span>2 – 6 لاعبين</span><span>مزاد وتبادل ورهن</span><span>حتى الإفلاس</span></div>
+      <div class="pt-meta"><span>1 – 6 لاعبين</span><span>ضد الكمبيوتر</span><span>مزاد وتبادل ورهن</span></div>
       <div class="pt-actions">
         <a class="pt-btn primary" href="/bank.html">العب بنك الحظ</a>
       </div>
     </article>
 
-    <article class="pt-card" id="game-snakes">
+    <article class="pt-card" id="game-snakes" data-cat="board">
       <div class="pt-art">
         <svg class="pt-sl" viewBox="0 0 250 250" aria-hidden="true">
           <g id="sl-squares"></g>
@@ -85,7 +104,7 @@
       </div>
     </article>
 
-    <article class="pt-card" id="game-domino">
+    <article class="pt-card" id="game-domino" data-cat="board">
       <div class="pt-art"><div class="pt-dm" id="domino-art" aria-hidden="true"></div></div>
       <div class="pt-title"><h2>دومنو</h2><span class="pt-tag live">جديدة</span></div>
       <p class="pt-desc">دومنو 6|6 على طاولة خضراء: طابق الأطراف، اسحب أو مرّر، وقل "دومنو!" أول واحد. سحب أو بلوك، وشراكة اثنين ضد اثنين.</p>
@@ -95,7 +114,7 @@
       </div>
     </article>
 
-    <article class="pt-card" id="game-tawla">
+    <article class="pt-card" id="game-tawla" data-cat="board">
       <div class="pt-art"><svg class="pt-tw" id="tawla-art" viewBox="0 0 220 140" aria-hidden="true"></svg></div>
       <div class="pt-title"><h2>طاولي</h2><span class="pt-tag live">جديدة</span></div>
       <p class="pt-desc">الطاولي على لوح خشب: ارمِ الزار، حرّك قطعك، اضرب قطع خصمك وخرّج قبله. المارس بنقطتين، والمباراة إلى 1 أو 3 أو 5 أو 7.</p>
@@ -105,15 +124,15 @@
       </div>
     </article>
 
-    <article class="pt-card" id="game-lagta">
+    <article class="pt-card" id="game-lagta" data-cat="quick">
       <div class="pt-art"><div class="pt-lg" id="lagta-art" aria-hidden="true"></div></div>
       <div class="pt-title"><h2>لقطة!</h2><span class="pt-tag live">جديدة</span></div>
       <p class="pt-desc">كل كرتين بينهم رمز واحد مشترك. أول من يلقطه بين كرته وكرت الوسط ياخذ الكرت. لعبة سرعة وعيون للعيلة كلها.</p>
-      <div class="pt-meta"><span>2 – 8 لاعبين</span><span>ضد الكمبيوتر</span><span>سريعة</span></div>
+      <div class="pt-meta"><span>1 – 8 لاعبين</span><span>ضد الكمبيوتر</span><span>سريعة</span></div>
       <div class="pt-actions"><a class="pt-btn primary" href="/lagta.html">العب لقطة!</a></div>
     </article>
 
-    <article class="pt-card" id="game-minhu">
+    <article class="pt-card" id="game-minhu" data-cat="quick">
       <div class="pt-art"><div class="pt-mh" id="minhu-art" aria-hidden="true"></div></div>
       <div class="pt-title"><h2>منو هو؟</h2><span class="pt-tag live">جديدة</span></div>
       <p class="pt-desc">عندك شخصية سرية وخصمك عنده وحدة. اسأل "لابس نظارات؟"، اقلب الوجوه المستبعدة، وخمّن قبله. 24 شخصية مرسومة.</p>
@@ -245,22 +264,50 @@
       for (let k = 1; k <= 9; k++) { const b = document.createElement('b'); if (on.indexOf(k) >= 0) b.className = 'on'; s.append(b); }
       dice.append(s);
     });
-    // a saved screw room? offer a way back
+    // every room saved on this device gets a way back
     try {
-      // a saved seat (card game or bank game) gets the shortcut
-      const pick = [['screw', 'سكرو', '/screw.html'], ['bank', 'بنك الحظ', '/bank.html'], ['seven', 'سبعة وسبعة', '/seven.html'], ['snakes', 'حية ودرج', '/snakes.html'], ['domino', 'دومنو', '/domino.html'], ['tawla', 'طاولي', '/tawla.html'], ['lagta', 'لقطة!', '/lagta.html'], ['minhu', 'منو هو؟', '/minhu.html']].map(function (g) {
+      const saved = [['screw', 'سكرو', '/screw.html'], ['seven', 'سبعة وسبعة', '/seven.html'], ['bank', 'بنك الحظ', '/bank.html'], ['snakes', 'حية ودرج', '/snakes.html'], ['domino', 'دومنو', '/domino.html'], ['tawla', 'طاولي', '/tawla.html'], ['lagta', 'لقطة!', '/lagta.html'], ['minhu', 'منو هو؟', '/minhu.html']].map(function (g) {
         const s = JSON.parse(localStorage.getItem(g[0] + '.session') || 'null');
-        return s && s.code ? { code: s.code, name: g[1], url: g[2] } : null;
-      }).filter(Boolean)[0];
-      if (pick) {
-        document.getElementById('resume-code').textContent = pick.code;
-        document.getElementById('resume-game').textContent = pick.name;
-        const a = document.getElementById('resume');
-        a.hidden = false;
-        a.href = pick.url + '?room=' + encodeURIComponent(pick.code);
+        return s && s.code ? { game: g[0], code: s.code, name: g[1], url: g[2] } : null;
+      }).filter(Boolean);
+      if (saved.length) {
+        const box = document.getElementById('resume');
+        const title = document.createElement('div');
+        title.className = 'pt-rtitle';
+        title.textContent = saved.length > 1 ? 'عندك غرف مفتوحة' : 'عندك غرفة مفتوحة';
+        box.append(title);
+        saved.forEach(function (r) {
+          const a = document.createElement('a');
+          a.className = 'pt-back';
+          a.href = r.url + '?room=' + encodeURIComponent(r.code);
+          const t = document.createElement('span');
+          const b1 = document.createElement('b');
+          b1.textContent = r.name;
+          const b2 = document.createElement('b');
+          b2.className = 'code';
+          b2.textContent = r.code;
+          t.append(b1, ' · الغرفة ', b2);
+          const go = document.createElement('span');
+          go.className = 'go';
+          go.textContent = 'ارجع';
+          a.append(t, go);
+          box.append(a);
+        });
+        box.hidden = false;
       }
     } catch (e) { /* storage unavailable: no shortcut */ }
+    // the filters: show one kind of game, remembered for next time
+    const cards = Array.prototype.slice.call(document.querySelectorAll('.pt-card'));
+    const chips = Array.prototype.slice.call(document.querySelectorAll('.pt-filters button'));
+    function show(cat) {
+      chips.forEach(function (c) { c.setAttribute('aria-pressed', c.dataset.cat === cat ? 'true' : 'false'); });
+      cards.forEach(function (c) { c.hidden = cat !== 'all' && c.dataset.cat !== cat; });
+      try { localStorage.setItem('portal.cat', cat); } catch (e) { /* no storage */ }
+    }
+    chips.forEach(function (c) { c.addEventListener('click', function () { show(c.dataset.cat); }); });
+    try { const last = localStorage.getItem('portal.cat'); if (last && chips.some(function (c) { return c.dataset.cat === last; })) show(last); } catch (e) { /* no storage */ }
   })();
 </script>
+<script src="/pwa.js" defer></script>
 </body>
 </html>

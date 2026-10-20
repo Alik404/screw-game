@@ -90,3 +90,9 @@ test('computer players claim the right symbol; a lost card can be skipped; nothi
   assert.ok(!('rng' in v));
   assert.equal(v.left, s.pile.length);
 });
+
+test('the hint is a lobby option, on by default', () => {
+  assert.equal(game().options.hint, true);
+  assert.equal(game({ hint: false }).options.hint, false);
+  assert.equal(E.createGame(['a', 'b'], { hint: 'yes' }).error, E.ERR.badOptions);
+});

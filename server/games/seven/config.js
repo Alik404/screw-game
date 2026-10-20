@@ -22,5 +22,8 @@
     POINTS: { skip: 20, reverse: 20, draw2: 20, wild: 50, wild4: 50 },
     // timers (used by the server layer; the engine itself never waits)
     TURN_SECONDS: 30,
+    BOT_SECONDS: 1.6, // a computer player's pause before it plays
+    AWAY_SECONDS: 5, // a disconnected player's turn comes this fast
+    BOT_NAME: 'كمبيوتر',
   };
 });

@@ -11,6 +11,9 @@
     INITIAL_PEEK_SECONDS: 10,
     PEEK_SECONDS: 5,
     TURN_SECONDS: 45,
+    BOT_SECONDS: 1.8, // a computer player's pause before it plays
+    AWAY_SECONDS: 6, // a disconnected player's turn comes this fast
+    BOT_NAME: 'كمبيوتر',
     ROUNDS: 5,
     LAST_ROUND_MULTIPLIER: 2,
     FAILED_SCREW_MULTIPLIER: 2,

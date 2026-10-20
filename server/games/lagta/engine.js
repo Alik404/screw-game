@@ -71,8 +71,10 @@
     const out = {
       size: o.size === undefined ? CONFIG.DEFAULT_SIZE : o.size,
       level: o.level === undefined ? CONFIG.DEFAULT_LEVEL : o.level,
+      hint: o.hint === undefined ? CONFIG.DEFAULT_HINT : o.hint,
     };
     if (CONFIG.SIZES.indexOf(out.size) < 0 || CONFIG.LEVELS.indexOf(out.level) < 0) return null;
+    if (typeof out.hint !== 'boolean') return null;
     return out;
   }
 

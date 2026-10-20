@@ -41,6 +41,8 @@ const TYPES = {
   '.svg': 'image/svg+xml',
   '.woff2': 'font/woff2',
   '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
 };
 
 function sendFile(res, file) {

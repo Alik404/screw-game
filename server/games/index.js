@@ -22,6 +22,7 @@ const LAGTA = require('./lagta/engine');
 const MINHU_CONFIG = require('./minhu/config');
 const MINHU = require('./minhu/engine');
 
+
 // The clock for whoever's move it is, in games with computer players: a short pause for a computer
 // player or someone who is away, the full turn otherwise, and nothing at all when no human is connected.
 function playerClock(roster, bots, cur, key, cfg) {
@@ -32,14 +33,21 @@ function playerClock(roster, bots, cur, key, cfg) {
   return [{ kind: 'turn', key: 'turn:' + key, seconds: cfg.TURN_SECONDS }];
 }
 
+// nobody but computer players is connected: every clock stops until someone comes back
+function nobodyHere(roster) {
+  return !!roster && !roster.some(function (p) { return p.connected && !p.bot; });
+}
+
 const screw = {
   id: 'screw',
   minPlayers: SCREW_CONFIG.MIN_PLAYERS,
   maxPlayers: SCREW_CONFIG.MAX_PLAYERS,
   actions: ['ready', 'draw', 'swap_drawn', 'discard_drawn', 'take_discard', 'match', 'use_ability', 'skip_ability', 'call_screw'],
+  bots: true,
+  botName: SCREW_CONFIG.BOT_NAME,
   // the only fields copied from a client message into an engine action
   fields: ['type', 'slot', 'targetPlayerId', 'targetSlot', 'mode', 'slots', 'picks'],
-  create: function (seats) { return SCREW.createGame(seats); },
+  create: function (seats, options, extra) { return SCREW.createGame(seats, { bots: extra && extra.bots }); },
   act: function (state, seat, action) { return SCREW.act(state, seat, action); },
   view: function (state, seat) { return SCREW.viewFor(state, seat); },
   // screw's view already has players[]: add the names and connection state
@@ -52,12 +60,18 @@ const screw = {
       return vp;
     });
   },
-  timers: function (s) {
+  // the opening peek, then one clock per turn (a computer player plays after a short pause)
+  timers: function (s, roster) {
+    if (nobodyHere(roster)) return [];
     if (s.phase === 'peek') return [{ kind: 'peek', key: 'peek:' + s.round, seconds: SCREW_CONFIG.INITIAL_PEEK_SECONDS }];
-    if (s.phase === 'turn') return [{ kind: 'turn', key: 'turn:' + s.round + ':' + s.turnCount, seconds: SCREW_CONFIG.TURN_SECONDS }];
+    if (s.phase === 'turn') return playerClock(roster, s.bots || [], s.playerIds[s.current], s.round + ':' + s.turnCount, SCREW_CONFIG);
     return [];
   },
-  timeout: function (s, kind) { return kind === 'peek' ? SCREW.forceStartPlay(s) : SCREW.autoPlay(s); },
+  timeout: function (s, kind) {
+    if (kind === 'peek') return SCREW.forceStartPlay(s);
+    if (kind === 'bot') { const r = SCREW.botPlay(s); return r.error ? SCREW.autoPlay(s) : r; }
+    return SCREW.autoPlay(s);
+  },
   messageFor: function (ev) {
     if (ev.type === 'round_end') {
       const r = ev.result;
@@ -79,20 +93,38 @@ const screw = {
 };
 
 // timers for the bank game: one main countdown for the current decision (restarted whenever the
-// decision changes) plus an independent one for an open trade offer
-function bankTimers(s) {
-  if (s.phase !== 'turn') return [];
+// decision changes) plus an independent one for an open trade offer. A computer player decides after a
+// short pause, and raises bids and answers trades the same way; a player who is away is played for quickly.
+function bankTimers(s, roster) {
+  if (s.phase !== 'turn' || nobodyHere(roster)) return [];
+  const bots = s.bots || [];
+  const away = function (id) {
+    const r = roster && roster.find(function (p) { return p.id === id; });
+    return !!r && !r.connected && !r.bot;
+  };
   const base = s.turnCount + ':' + s.doublesInRow;
   const list = [];
+  const clock = function (kind, key, seconds, who) {
+    if (bots.indexOf(who) >= 0 && BANK.botWaiting(s)) list.push({ kind: 'bot', key: 'bot:' + key, seconds: BANK_CONFIG.BOT_SECONDS });
+    else if (away(who)) list.push({ kind: kind, key: key + ':away', seconds: BANK_CONFIG.AWAY_SECONDS });
+    else list.push({ kind: kind, key: key, seconds: seconds });
+  };
+  const cur = s.playerIds[s.current];
   switch (s.stage) {
-    case 'roll': list.push({ kind: 'turn', key: 'roll:' + base, seconds: BANK_CONFIG.TURN_SECONDS }); break;
-    case 'buy': list.push({ kind: 'buy', key: 'buy:' + base, seconds: BANK_CONFIG.BUY_SECONDS }); break;
-    case 'auction': list.push({ kind: 'auction', key: 'auction:' + base + ':' + s.auction.seq, seconds: BANK_CONFIG.AUCTION_SECONDS }); break;
-    case 'debt': list.push({ kind: 'debt', key: 'debt:' + base + ':' + s.debts.length + ':' + s.debts[0].debtor, seconds: BANK_CONFIG.DEBT_SECONDS }); break;
-    case 'postRoll': list.push({ kind: 'post', key: 'post:' + base, seconds: BANK_CONFIG.POST_MOVE_SECONDS }); break;
+    case 'roll': clock('turn', 'roll:' + base, BANK_CONFIG.TURN_SECONDS, cur); break;
+    case 'buy': clock('buy', 'buy:' + base, BANK_CONFIG.BUY_SECONDS, cur); break;
+    case 'auction':
+      list.push({ kind: 'auction', key: 'auction:' + base + ':' + s.auction.seq, seconds: BANK_CONFIG.AUCTION_SECONDS });
+      if (BANK.botBidFor(s)) list.push({ kind: 'botbid', key: 'bb:' + base + ':' + s.auction.seq, seconds: BANK_CONFIG.BOT_BID_SECONDS });
+      break;
+    case 'debt': clock('debt', 'debt:' + base + ':' + s.debts.length + ':' + s.debts[0].debtor, BANK_CONFIG.DEBT_SECONDS, s.debts[0].debtor); break;
+    case 'postRoll': clock('post', 'post:' + base, BANK_CONFIG.POST_MOVE_SECONDS, cur); break;
     default: break;
   }
-  if (s.trade) list.push({ kind: 'trade', key: 'trade:' + s.trade.id, seconds: BANK_CONFIG.TRADE_SECONDS });
+  if (s.trade) {
+    if (bots.indexOf(s.trade.to) >= 0) list.push({ kind: 'bottrade', key: 'bt:' + s.trade.id, seconds: BANK_CONFIG.BOT_TRADE_SECONDS });
+    else list.push({ kind: 'trade', key: 'trade:' + s.trade.id, seconds: BANK_CONFIG.TRADE_SECONDS });
+  }
   return list;
 }
 
@@ -106,7 +138,9 @@ const bank = {
   ],
   fields: ['type', 'square', 'amount', 'to', 'give', 'get'],
   tokens: BANK_CONFIG.TOKENS,
-  create: function (seats) { return BANK.createGame(seats); },
+  bots: true,
+  botName: BANK_CONFIG.BOT_NAME,
+  create: function (seats, options, extra) { return BANK.createGame(seats, { bots: extra && extra.bots }); },
   act: function (state, seat, action) {
     const r = BANK.act(state, seat, action);
     if (r.state) r.privates = []; // nothing in this game is private
@@ -116,7 +150,13 @@ const bank = {
   decorate: function () { /* the client reads names from game_state.roster */ },
   timers: bankTimers,
   timeout: function (s, kind) {
-    const r = kind === 'trade' ? BANK.expireTrade(s) : kind === 'auction' ? BANK.closeAuction(s) : BANK.autoPlay(s);
+    let r;
+    if (kind === 'trade') r = BANK.expireTrade(s);
+    else if (kind === 'auction') r = BANK.closeAuction(s);
+    else if (kind === 'botbid') r = BANK.botBid(s);
+    else if (kind === 'bottrade') { r = BANK.botTrade(s); if (r.error) r = BANK.expireTrade(s); }
+    else if (kind === 'bot') { r = BANK.botAct(s); if (r.error) r = BANK.autoPlay(s); }
+    else r = BANK.autoPlay(s);
     if (r.state) r.privates = [];
     return r;
   },
@@ -124,7 +164,7 @@ const bank = {
   host: {
     new_game: function (s) {
       if (s.phase !== 'gameOver') return { error: BANK.ERR.wrongStage };
-      const g = BANK.createGame(s.playerIds);
+      const g = BANK.createGame(s.playerIds, { bots: s.bots });
       if (g.state) { g.events = []; g.privates = []; }
       return g;
     },
@@ -142,12 +182,15 @@ const seven = {
   maxPlayers: SEVEN_CONFIG.MAX_PLAYERS,
   actions: ['play', 'draw', 'keep', 'play_drawn', 'choose_color'],
   fields: ['type', 'card', 'color'],
+  bots: true,
+  botName: SEVEN_CONFIG.BOT_NAME,
+  checkOptions: function (o) { return o.rounds === undefined || SEVEN_CONFIG.ROUNDS_OPTIONS.indexOf(o.rounds) >= 0 ? null : SEVEN.ERR.badRounds; },
   // the only host option: how many rounds (checked by the engine against ROUNDS_OPTIONS)
   startOptions: function (m) {
     const o = m && m.options && typeof m.options === 'object' ? m.options : {};
     return { rounds: o.rounds };
   },
-  create: function (seats, options) { return SEVEN.createGame(seats, { rounds: options && options.rounds }); },
+  create: function (seats, options, extra) { return SEVEN.createGame(seats, { rounds: options && options.rounds, bots: extra && extra.bots }); },
   act: function (state, seat, action) { return SEVEN.act(state, seat, action); },
   view: function (state, seat) { return SEVEN.viewFor(state, seat); },
   // the view already has players[] (id + card count): add names and connection state
@@ -157,15 +200,19 @@ const seven = {
       vp.name = rp.name;
       vp.connected = rp.connected;
       vp.isHost = rp.isHost;
+      vp.bot = rp.bot;
       return vp;
     });
   },
   // one clock per turn; the key changes when the turn passes, not when a drawn card is decided
-  timers: function (s) {
+  timers: function (s, roster) {
     if (s.phase !== 'turn') return [];
-    return [{ kind: 'turn', key: 'turn:' + s.round + ':' + s.turnCount, seconds: SEVEN_CONFIG.TURN_SECONDS }];
+    return playerClock(roster, s.bots || [], s.playerIds[s.current], s.round + ':' + s.turnCount, SEVEN_CONFIG);
   },
-  timeout: function (s) { return SEVEN.autoPlay(s); },
+  timeout: function (s, kind) {
+    if (kind === 'bot') { const r = SEVEN.botPlay(s); return r.error ? SEVEN.autoPlay(s) : r; }
+    return SEVEN.autoPlay(s);
+  },
   messageFor: function (ev) {
     if (ev.type === 'round_end') {
       const r = ev.result;
@@ -178,7 +225,7 @@ const seven = {
     next_round: function (s, seat) { return SEVEN.act(s, seat, { type: 'next_round' }); },
     new_game: function (s) {
       if (s.phase !== 'gameOver') return { error: SEVEN.ERR.wrongStage };
-      return SEVEN.createGame(s.playerIds, { rounds: s.rounds });
+      return SEVEN.createGame(s.playerIds, { rounds: s.rounds, bots: s.bots });
     },
   },
 };
@@ -343,7 +390,7 @@ const lagta = {
   botName: LAGTA_CONFIG.BOT_NAME,
   startOptions: function (m) {
     const o = m && m.options && typeof m.options === 'object' ? m.options : {};
-    return { size: o.size, level: o.level };
+    return { size: o.size, level: o.level, hint: o.hint };
   },
   checkOptions: function (o) { return LAGTA.readOptions(o) ? null : LAGTA.ERR.badOptions; },
   create: function (seats, options, extra) {

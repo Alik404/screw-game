@@ -1,0 +1,26 @@
+{
+  "name": "ألعاب الأصدقاء",
+  "short_name": "ألعاب",
+  "description": "ألعاب ورق ولوح ونرد أونلاين مع أصدقائك أو ضد الكمبيوتر: سكرو، سبعة وسبعة، بنك الحظ، حية ودرج، دومنو، طاولي، لقطة!، منو هو؟",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b2529",
+  "theme_color": "#0b2529",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "سكرو", "url": "/screw.html", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "دومنو", "url": "/domino.html", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "طاولي", "url": "/tawla.html", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] },
+    { "name": "منو هو؟", "url": "/minhu.html", "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

@@ -253,12 +253,16 @@
       case 'room_state':
         S.room = m;
         break;
+      case 'reaction':
+        window.Reactions.show(m.from, m.id);
+        return;
       case 'game_state': {
         const prev = S.game;
         snap = FX.snapshot();
         S.game = m;
         S.gameVersion += 1;
-        S.timerEndsLocal = m.timer ? m.timer.endsAt - (m.timer.now - now) : null;
+        // a computer player's short pause is not a countdown anyone needs to see
+        S.timerEndsLocal = m.timer && m.timer.kind !== 'bot' ? m.timer.endsAt - (m.timer.now - now) : null;
         if (S.pending && S.pending.key !== turnKey(m)) S.pending = null;
         if (S.sheet === 'screw' && !m.screwAllowed) S.sheet = null;
         if (m.phase !== 'roundOver') S.hideResult = false;
@@ -478,14 +482,17 @@
         h('button', { class: 'with-icon help-btn', onclick: api.toggleHelp }, UI.icon('help', 20), 'طريقة اللعب')),
       h('div', { class: 'dim' }, 'اللاعبون (' + r.players.length + '/' + C.MAX_PLAYERS + ')'),
       h('ul', { class: 'plist' }, r.players.map(function (p, i) {
-        return h('li', { class: p.connected ? '' : 'off' },
-          h('span', { class: 'avatar ' + AVATAR_CLASSES[i % AVATAR_CLASSES.length] }, Array.from(p.name)[0] || '؟'),
+        return h('li', { class: p.connected ? '' : 'off', 'data-chip': p.id },
+          h('span', { class: 'avatar ' + AVATAR_CLASSES[i % AVATAR_CLASSES.length] }, p.bot ? '🤖' : (Array.from(p.name)[0] || '؟')),
           h('span', { class: 'pname' }, p.name + (p.id === S.you ? ' (أنت)' : ''), p.connected ? null : h('small', null, ' غير متصل')),
-          p.isHost ? h('span', { class: 'tag' }, 'المضيف') : null);
+          p.isHost ? h('span', { class: 'tag' }, 'المضيف') : null,
+          p.bot && amHost ? h('button', { class: 'icon-btn lob-rm', 'aria-label': 'احذف ' + p.name, onclick: function () { send({ type: 'remove_bot', id: p.id }); } }, UI.icon('close', 20)) : null);
       })),
+      amHost && r.players.length < C.MAX_PLAYERS ? h('button', { class: 'with-icon', onclick: function () { send({ type: 'add_bot' }); } }, '🤖', ' أضف لاعب كمبيوتر') : null,
+      h('div', { class: 'lob-row' }, window.Reactions.button()),
       h('div', { class: 'grow' }),
       amHost
-        ? [present < C.MIN_PLAYERS ? h('div', { class: 'center dim' }, 'بانتظار لاعب واحد على الأقل…') : null,
+        ? [present < C.MIN_PLAYERS ? h('div', { class: 'center dim' }, 'أرسل الرابط لأصدقائك أو أضف لاعب كمبيوتر.') : null,
           h('button', { class: 'primary big', disabled: present < C.MIN_PLAYERS, onclick: function () { send({ type: 'start_game' }); } }, 'ابدأ')]
         : h('div', { class: 'center dim' }, 'بانتظار المضيف ليبدأ اللعبة…'));
   }
@@ -714,6 +721,11 @@
     if (e.key === 'Escape' && (S.sheet || S.pending)) { S.sheet = null; S.pending = null; render(); }
   });
 
+  window.Reactions.init({
+    send: function (msg) { sendRaw(msg); },
+    nameOf: function (id) { return id === S.you ? 'أنت' : UI.nameOf(S, id); },
+    anchorFor: function (id) { return document.querySelector('[data-player="' + id + '"]') || document.querySelector('[data-chip="' + id + '"]') || (id === S.you ? document.querySelector('.mine') : null); },
+  });
   render();
   connect();
 })();

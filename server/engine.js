@@ -110,6 +110,13 @@
       });
     }
     s.discard.push(s.deck.pop()); // first floor card: its ability never fires
+    // computer players look at their two cards at once (the same peek everyone gets) and are ready
+    s.mem = {};
+    (s.bots || []).forEach(function (id) {
+      s.mem[id] = {};
+      s.hands[id].slice(0, CONFIG.INITIAL_PEEK_COUNT).forEach(function (c) { s.mem[id][c.handId] = { v: c.value, k: Deck.kindOf(c) }; });
+      s.ready[id] = true;
+    });
     s.phase = 'peek';
     s.current = s.firstIndex = (s.round - 1) % n;
     s.stage = 'start';
@@ -139,6 +146,7 @@
       rng: opts.seed === undefined ? randomSeed() : opts.seed >>> 0,
       idRng: opts.idSeed === undefined ? randomSeed() : opts.idSeed >>> 0,
       playerIds: playerIds.slice(),
+      bots: Array.isArray(opts.bots) ? opts.bots.filter(function (id) { return playerIds.indexOf(id) >= 0; }) : [],
       round: 1,
       totals: {},
       history: [],
@@ -481,11 +489,176 @@
 
   // ---------- public API ----------
 
+  // A computer player remembers every card it is shown (by the card's hand id, which follows the card
+  // through swaps); it is never told anything a person in its seat would not see.
+  function learn(ctx) {
+    const s = ctx.s;
+    if (!s.bots || !s.bots.length) return;
+    ctx.privates.forEach(function (pv) {
+      if (s.bots.indexOf(pv.playerId) < 0) return;
+      const mem = s.mem[pv.playerId] || (s.mem[pv.playerId] = {});
+      pv.reveals.forEach(function (r) { if (r.handId) mem[r.handId] = { v: r.card.value, k: Deck.kindOf(r.card) }; });
+    });
+  }
+
   function run(state, fn) {
     const ctx = { s: clone(state), events: [], privates: [] };
     const err = fn(ctx);
     if (err) return { error: err };
+    learn(ctx);
     return { state: ctx.s, events: ctx.events, privates: ctx.privates };
+  }
+
+  // ---------- the computer player ----------
+
+  const AVG = 7.4; // the average card of the deck (428 points over 58 cards)
+  const OTHER_AVG = 5; // a card someone else kept: people keep their low cards
+
+  function botTurn(ctx, pid) {
+    const s = ctx.s;
+    const mem = s.mem[pid] || (s.mem[pid] = {});
+    const hand = s.hands[pid];
+    const know = function (c) { return mem[c.handId] || null; };
+    const est = function (c) { const k = know(c); return k ? k.v : AVG; };
+    // the slot to get rid of: the highest card (as far as I know)
+    const worst = function () {
+      let best = -1;
+      let bestV = -Infinity;
+      hand.forEach(function (c, i) { const v = est(c); if (v > bestV) { bestV = v; best = i; } });
+      return best;
+    };
+    const top = s.discard.length ? s.discard[s.discard.length - 1] : null;
+
+    if (s.stage === 'start') {
+      if (s.screwCaller === null && lapOf(s) >= CONFIG.SCREW_ALLOWED_FROM_LAP && shouldCall(s, pid)) return H.call_screw(ctx, pid);
+      // a card I know matches the floor: throw it (never a card worth nothing or less)
+      if (top) {
+        const kind = Deck.kindOf(top);
+        let slot = -1;
+        let v = 0;
+        hand.forEach(function (c, i) { const k = know(c); if (k && k.k === kind && k.v > v) { slot = i; v = k.v; } });
+        if (slot >= 0) return H.match(ctx, pid, { slot: slot });
+      }
+      // a low card on the floor: take it in place of my worst one
+      if (top && top.value <= 3) {
+        const slot = worst();
+        if (slot >= 0 && est(hand[slot]) - top.value >= 3) {
+          const card = { v: top.value, k: Deck.kindOf(top) };
+          const err = H.take_discard(ctx, pid, { slot: slot });
+          if (!err && hand[slot]) mem[hand[slot].handId] = card;
+          return err;
+        }
+      }
+      if (H.draw(ctx, pid)) { endTurn(ctx); return null; } // nothing left to draw
+    }
+
+    if (s.stage === 'drawn') {
+      const d = s.drawn;
+      const slot = worst();
+      const gain = slot >= 0 ? est(hand[slot]) - d.value : -Infinity;
+      // a card with a power is worth throwing to use it, unless keeping it saves a lot
+      if (gain >= (Deck.abilityOf(d) ? 4 : 2)) {
+        const card = { v: d.value, k: Deck.kindOf(d) };
+        H.swap_drawn(ctx, pid, { slot: slot });
+        if (hand[slot]) mem[hand[slot].handId] = card;
+        return null;
+      }
+      H.discard_drawn(ctx, pid);
+    }
+
+    if (s.phase === 'turn' && s.stage === 'ability' && currentId(s) === pid) return botAbility(ctx, pid, know, est, worst);
+    return null;
+  }
+
+  function botAbility(ctx, pid, know, est, worst) {
+    const s = ctx.s;
+    const hand = s.hands[pid];
+    const others = s.playerIds.filter(function (id) { return id !== pid && s.hands[id].length; });
+    const unknownOwn = [];
+    hand.forEach(function (c, i) { if (!know(c)) unknownOwn.push(i); });
+    // someone else's card I have not seen (the screw caller's cards are locked, so skip them)
+    const unknownOther = function () {
+      for (let k = 0; k < others.length; k++) {
+        const id = others[k];
+        const i = s.hands[id].findIndex(function (c) { return !know(c); });
+        if (i >= 0) return { id: id, slot: i };
+      }
+      return null;
+    };
+    switch (s.ability) {
+      case 'peek_own':
+        if (unknownOwn.length) return H.use_ability(ctx, pid, { slot: unknownOwn[0] });
+        break;
+      case 'peek_other': {
+        const t = unknownOther();
+        if (t) return H.use_ability(ctx, pid, { targetPlayerId: t.id, targetSlot: t.slot });
+        break;
+      }
+      case 'swap': {
+        const mine = worst();
+        if (mine < 0) break;
+        const myV = est(hand[mine]);
+        let best = null;
+        others.forEach(function (id) {
+          if (id === s.screwCaller) return;
+          s.hands[id].forEach(function (c, i) {
+            const k = know(c);
+            const v = k ? k.v : OTHER_AVG + 1.5;
+            if (!best || v < best.v) best = { id: id, slot: i, v: v, known: !!k };
+          });
+        });
+        if (best && myV - best.v >= (best.known ? 3 : 2.5)) return H.use_ability(ctx, pid, { slot: mine, targetPlayerId: best.id, targetSlot: best.slot });
+        break;
+      }
+      case 'peek_all': {
+        const need = Math.min(CONFIG.PEEK_ALL_SELF_COUNT, hand.length);
+        if (unknownOwn.length && need > 0) {
+          const slots = unknownOwn.slice(0, need);
+          for (let i = 0; slots.length < need && i < hand.length; i++) if (slots.indexOf(i) < 0) slots.push(i);
+          return H.use_ability(ctx, pid, { mode: 'self', slots: slots });
+        }
+        if (others.length) {
+          const picks = others.map(function (id) {
+            const i = s.hands[id].findIndex(function (c) { return !know(c); });
+            return { playerId: id, slot: i >= 0 ? i : 0 };
+          });
+          return H.use_ability(ctx, pid, { mode: 'others', picks: picks });
+        }
+        break;
+      }
+      case 'throw': {
+        const mine = worst();
+        if (mine >= 0 && est(hand[mine]) > 0) return H.use_ability(ctx, pid, { slot: mine });
+        break;
+      }
+      default:
+        break;
+    }
+    return H.skip_ability(ctx, pid);
+  }
+
+  // call screw when my hand looks clearly lower than everybody else's
+  function shouldCall(s, pid) {
+    const mem = s.mem[pid] || {};
+    let sum = 0;
+    let unknown = 0;
+    s.hands[pid].forEach(function (c) { const k = mem[c.handId]; if (k) sum += k.v; else { unknown += 1; sum += AVG; } });
+    if (unknown > 1) return false;
+    let low = Infinity;
+    s.playerIds.forEach(function (id) {
+      if (id === pid) return;
+      let t = 0;
+      s.hands[id].forEach(function (c) { const k = mem[c.handId]; t += k ? k.v : OTHER_AVG; });
+      low = Math.min(low, t);
+    });
+    return sum <= 4 || (sum <= 9 && sum + 2 <= low);
+  }
+
+  // a computer player's whole turn
+  function botPlay(state) {
+    if (state.phase !== 'turn') return { error: ERR.wrongPhase };
+    if (!state.bots || state.bots.indexOf(currentId(state)) < 0) return { error: ERR.notYourTurn };
+    return run(state, function (ctx) { return botTurn(ctx, currentId(ctx.s)); });
   }
 
   function act(state, playerId, action) {
@@ -567,10 +740,10 @@
 
   // Start a fresh 5-round game for the same players.
   function newGame(state, opts) {
-    return createGame(state.playerIds, opts);
+    return createGame(state.playerIds, Object.assign({ bots: state.bots }, opts));
   }
 
   return {
-    ERR, createGame, newGame, act, autoPlay, forceStartPlay, viewFor, scoreRound, lapOf,
+    ERR, createGame, newGame, act, autoPlay, botPlay, forceStartPlay, viewFor, scoreRound, lapOf,
   };
 });

@@ -35,5 +35,10 @@
     TRADE_SECONDS: 60,
     DEBT_SECONDS: 60,
     POST_MOVE_SECONDS: 30,
+    BOT_SECONDS: 1.7, // a computer player's pause before each decision (long enough to see the piece walk)
+    BOT_BID_SECONDS: 1.4, // ... before it raises a bid
+    BOT_TRADE_SECONDS: 2.5, // ... before it answers a trade
+    AWAY_SECONDS: 5, // a disconnected player's decision comes this fast
+    BOT_NAME: 'كمبيوتر',
   };
 });

@@ -127,3 +127,22 @@ body.portal { min-height: 100dvh; }
 .pt-mh .mh-card:nth-child(1) { left: 14px; transform: rotate(-10deg); }
 .pt-mh .mh-card:nth-child(2) { left: 68px; top: 4px; z-index: 1; }
 .pt-mh .mh-card:nth-child(3) { left: 122px; transform: rotate(10deg); }
+
+/* the install box, every open room, the filters */
+.pt-install { display: flex; align-items: center; gap: var(--s3); background: var(--table-deep); border: 1.5px solid var(--brass); border-radius: var(--r-sheet); padding: var(--s3); }
+.pt-install[hidden], .pt-resume[hidden], .pt-card[hidden] { display: none; }
+.pt-install img { border-radius: 12px; flex: none; }
+.pt-install .txt { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pt-install .txt b { color: var(--brass); }
+.pt-install .txt span { font-size: var(--fs-1); color: var(--text-dim); line-height: 1.5; }
+.pt-ibtn { font: inherit; font-weight: 700; min-height: 44px; padding: 0 var(--s4); border: 0; border-radius: var(--r-btn); background: var(--brass); color: var(--ink); cursor: pointer; }
+.pt-ibtn[hidden] { display: none; }
+.pt-iclose { font: inherit; min-width: 36px; min-height: 36px; border: 0; background: transparent; color: var(--text-dim); cursor: pointer; border-radius: 50%; }
+.pt-resume { display: flex; flex-direction: column; gap: var(--s2); }
+.pt-rtitle { font-size: var(--fs-1); color: var(--text-dim); }
+.pt-back .code { letter-spacing: .15em; direction: ltr; unicode-bidi: isolate; }
+.pt-filters { display: flex; gap: var(--s2); overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; justify-content: center; }
+.pt-filters::-webkit-scrollbar { display: none; }
+.pt-filters button { font: inherit; font-size: var(--fs-2); font-weight: 500; min-height: 40px; padding: 0 var(--s4); border-radius: 999px; border: 1.5px solid var(--table-glow); background: var(--table-deep); color: var(--text); cursor: pointer; white-space: nowrap; }
+.pt-filters button[aria-pressed="true"] { background: var(--brass); border-color: var(--brass); color: var(--ink); font-weight: 700; }
+.pt-filters button:focus-visible { outline: 3px solid var(--brass); outline-offset: 2px; }
