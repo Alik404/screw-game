@@ -22,7 +22,7 @@
     ROOM_IDLE_MINUTES: 30, // delete a room this long after its last player disconnects
     LOBBY_GRACE_SECONDS: 60, // a disconnected lobby player is removed after this long
     NAME_MAX_LENGTH: 16,
-    MAX_MESSAGE_BYTES: 2048,
+    MAX_MESSAGE_BYTES: 8192, // big enough for a voice call offer (about 3-5 KB)
     HEARTBEAT_SECONDS: 25,
     MAX_ROOMS: 200, // protection: rooms kept in memory at once
     RATE_LIMIT_MESSAGES: 40, // protection: messages one connection may send ...

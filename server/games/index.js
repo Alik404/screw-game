@@ -392,8 +392,9 @@ const minhu = {
   id: 'minhu',
   minPlayers: MINHU_CONFIG.MIN_PLAYERS,
   maxPlayers: MINHU_CONFIG.MAX_PLAYERS,
-  actions: ['pick', 'ask', 'flip', 'end_turn', 'guess'],
-  fields: ['type', 'q', 'ids', 'char', 'random'],
+  actions: ['pick', 'ask', 'ask_free', 'answer', 'chat', 'flip', 'end_turn', 'guess'],
+  fields: ['type', 'q', 'ids', 'char', 'random', 'text', 'voice', 'yes'],
+  voice: true, // the two players may open a voice call (rooms.js relays the call setup)
   bots: true,
   botName: MINHU_CONFIG.BOT_NAME,
   startOptions: function (m) {
@@ -404,6 +405,8 @@ const minhu = {
   create: function (seats, options, extra) {
     const o = Object.assign({}, options);
     o.bots = extra && extra.bots;
+    // two people ask each other freely; against the computer the questions come from the list
+    o.ask = o.bots && o.bots.length ? 'list' : 'free';
     return MINHU.createGame(seats, o);
   },
   act: function (state, seat, action) { return MINHU.act(state, seat, action); },
@@ -422,6 +425,11 @@ const minhu = {
     if (s.phase === 'pick') {
       if (roster && !roster.some(function (p) { return p.connected && !p.bot; })) return [];
       return [{ kind: 'pick', key: 'pick:' + s.round, seconds: MINHU_CONFIG.PICK_SECONDS }];
+    }
+    if (s.phase === 'turn' && s.stage === 'answer') {
+      // the clock is the answerer's now
+      const answerer = s.playerIds[1 - s.current];
+      return playerClock(roster, s.bots, answerer, s.round + ':' + s.turnCount + 'a', { BOT_SECONDS: MINHU_CONFIG.BOT_SECONDS, AWAY_SECONDS: MINHU_CONFIG.AWAY_SECONDS, TURN_SECONDS: MINHU_CONFIG.ANSWER_SECONDS });
     }
     if (s.phase === 'turn') return playerClock(roster, s.bots, s.playerIds[s.current], s.round + ':' + s.turnCount + (s.bots.indexOf(s.playerIds[s.current]) >= 0 ? s.stage : ''), MINHU_CONFIG);
     if (s.phase === 'roundOver' && (!roster || roster.some(function (p) { return p.connected && !p.bot; }))) {

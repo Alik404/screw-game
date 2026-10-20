@@ -46,6 +46,12 @@
     flipall: '<path d="M4 7h11M4 12h8M4 17h5"/><path d="M16 12l3 3 3-6"/>',
     next: '<path d="M5 12h12M13 6l6 6-6 6"/>',
     list: '<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>',
+    chat: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9.5h8M8 12.5h5"/>',
+    phone: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a1 1 0 0 1-1 1A16 16 0 0 1 4 5a1 1 0 0 1 1-1z"/>',
+    hang: '<path d="M3 15.5c5-4.5 13-4.5 18 0l-2.5 2.5-3.5-1.5v-2.5a10 10 0 0 0-6 0v2.5L5.5 18z"/>',
+    mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+    micoff: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M4 4l16 16"/>',
+    send: '<path d="M4 12l16-8-6 16-3-7z"/>',
   };
   function icon(name, size) {
     const s = document.createElement('span');
@@ -90,6 +96,7 @@
     elec: store(GAME + '.elec') !== false, // the electronic edition (the default look)
     voice: store(GAME + '.voice') !== false, // it reads questions and answers aloud
     lcd: null, // {q, a, cls, until}: what the screen flashes for a moment
+    draft: '', chatDraft: '', focus: null, unread: 0, // the question being typed, the chat
     down: null, // my board (optimistic; the server keeps the truth)
     flipTimer: null, guessMode: false, guessPick: null, sent: false, resultAt: 0, hideResult: false,
   };
@@ -112,10 +119,18 @@
   function send(msg) { if (!sendRaw(msg)) { toast('لا يوجد اتصال. جاري إعادة المحاولة…'); return false; } render(); return true; }
   function toast(text, ok) { S.toast = { text: text, ok: !!ok, until: Date.now() + 3500 }; render(); }
   function leaveRoom() {
+    call.end();
     S.session = null; store(GAME + '.session', null);
     S.you = null; S.room = null; S.game = null; S.sheet = null; urlCode = ''; S.codeInput = '';
     try { history.replaceState(null, '', '/minhu.html'); } catch (e) { /* ignore */ }
   }
+
+  // the private voice call with the other player
+  const call = window.MinhuCall.create({
+    send: function (d) { sendRaw({ type: 'rtc', data: d }); },
+    onChange: function () { render(); },
+    onRing: function () { sfx('turn'); buzz([120, 80, 120]); },
+  });
 
   function onMessage(m) {
     switch (m.type) {
@@ -135,6 +150,11 @@
       case 'game_state': onGameState(m); break;
       case 'event': onEvent(m.event); break;
       case 'reaction': showReaction(m.from, m.id); return;
+      case 'rtc': {
+        const ids = S.game ? S.game.playerIds : (S.room ? S.room.players.map(function (p) { return p.id; }) : []);
+        call.onSignal(m.data, ids.indexOf(S.you) < ids.indexOf(m.from));
+        return;
+      }
       case 'error':
         S.sent = false;
         if (S.autoJoining) { S.autoJoining = false; leaveRoom(); if (m.code === 'NO_ROOM') S.lost = { restarted: S.serverRestarted }; else { S.homeError = m.message; toast(m.message); } } else { if (!S.you) S.homeError = m.message; toast(m.message); }
@@ -211,6 +231,15 @@
     setTimeout(function () { el.classList.add('out'); }, 1500);
     setTimeout(function () { el.remove(); }, 1850);
   }
+  // a chat message pops up over the sender for a moment
+  function chatBubble(from, text) {
+    const r = rectOf('[data-seat="' + from + '"]');
+    const el = h('div', { class: 'mh-chatpop', 'aria-hidden': 'true' }, h('b', null, nm(from) + ': '), text.length > 60 ? text.slice(0, 60) + '…' : text);
+    el.style.left = (r ? r.left + r.width / 2 : innerWidth / 2) + 'px';
+    el.style.top = (r ? r.top + r.height + 6 : 70) + 'px';
+    document.body.append(el);
+    setTimeout(function () { el.remove(); }, 3600);
+  }
   function confetti() {
     if (reduced()) return;
     const box = h('div', { class: 'mh-confetti', 'aria-hidden': 'true' });
@@ -239,6 +268,31 @@
         sfx('turn');
         announce('يلا نبدي!', isMe(e.firstPlayerId) ? 'أنت تبدأ' : 'يبدأ ' + nm(e.firstPlayerId), 'start');
         speak('يلا نبدي. ' + (isMe(e.firstPlayerId) ? 'أنت تبدأ' : 'يبدأ ' + nm(e.firstPlayerId)));
+        break;
+      case 'question': {
+        if (isMe(e.playerId)) break;
+        // they ask me: I answer
+        sfx('turn');
+        buzz([60, 40, 60]);
+        announce(e.voice ? nm(e.playerId) + ' سألك بالصوت' : nm(e.playerId) + ' يسأل:', e.voice ? 'جاوب 👇' : e.text, 'theirs');
+        if (!e.voice && call.state === 'idle') speak(nm(e.playerId) + ' يسأل: ' + e.text);
+        break;
+      }
+      case 'answer': {
+        const asker = S.game ? S.game.currentPlayerId : null;
+        if (asker !== S.you) break;
+        const word = e.yes === null ? 'ما جاوب' : e.yes ? 'نعم ✓' : 'لا ✗';
+        announce(e.voice ? 'سؤالك بالصوت' : e.text, word, e.yes ? 'yes' : 'no');
+        sfx(e.yes ? 'ladder' : 'knock');
+        if (call.state === 'idle') speak(e.yes === null ? 'ما جاوب' : e.yes ? 'نعم' : 'لا');
+        break;
+      }
+      case 'chat':
+        if (!isMe(e.playerId)) {
+          if (S.sheet !== 'chat') S.unread += 1;
+          sfx('flip');
+          chatBubble(e.playerId, e.text);
+        }
         break;
       case 'ask': {
         const q = question(e.q);
@@ -296,19 +350,6 @@
     sfx('flip');
     setDown(d);
   }
-  // every face my answers rule out, turned down
-  function autoFlip() {
-    const v = S.game;
-    const mine = v.asked.filter(function (a) { return a.by === v.you; });
-    const d = S.down.slice();
-    for (let i = 0; i < N; i++) {
-      if (d.indexOf(i) >= 0) continue;
-      if (!mine.every(function (a) { return matches(i, question(a.q)) === a.yes; })) d.push(i);
-    }
-    sfx('deal');
-    setDown(d);
-  }
-
   function faceCard(i, o) {
     o = o || {};
     const set = o.set || curSet();
@@ -420,6 +461,27 @@
 
   function secondsOf(end) { return end ? Math.max(0, Math.ceil((end - Date.now()) / 1000)) : null; }
 
+  function qText(a) { return a.q ? question(a.q).text : a.voice ? '🎤 سؤال بالصوت' : a.text; }
+  function ansText(yes) { return yes === null ? 'ما جاوب' : yes ? 'نعم' : 'لا'; }
+  function ansCls(yes) { return yes === null ? 'none' : yes ? 'yes' : 'no'; }
+
+  // the question box: what I type stays while the page redraws
+  function askForm() {
+    const input = h('input', {
+      id: 'mh-askin', type: 'text', maxlength: C.QUESTION_MAX, placeholder: 'اكتب سؤالك… مثلاً: لابس نظارات؟', value: S.draft, autocomplete: 'off',
+      oninput: function (e) { S.draft = e.target.value; },
+      onfocus: function () { S.focus = 'ask'; },
+      onblur: function () { if (S.focus === 'ask') S.focus = null; },
+    });
+    return h('form', { class: 'mh-askform', onsubmit: function (e) {
+      e.preventDefault();
+      const t = S.draft.trim();
+      if (!t) { toast('اكتب سؤالك أولاً.'); return; }
+      S.focus = null;
+      if (send({ type: 'ask_free', text: t })) { S.sent = true; S.draft = ''; }
+    } }, input, h('button', { class: 'primary arc-ask with-icon', type: 'submit' }, icon('send', 18), 'اسأل'));
+  }
+
   function lastAnswer(v, by) {
     for (let k = v.asked.length - 1; k >= 0; k--) if (v.asked[k].by === by) return v.asked[k];
     return null;
@@ -428,35 +490,53 @@
   function actionPanel(v) {
     const myTurn = v.phase === 'turn' && v.currentPlayerId === v.you;
     const opp = other(v);
+    const free = v.options.ask === 'free';
+    const panel = function () { return h('div', { class: 'mh-panel' }, Array.prototype.slice.call(arguments)); };
+    const wait = function (t) { return h('div', { class: 'mh-wait' }, t); };
     if (v.phase === 'pick') {
       if (v.secret === null && !S.sent) {
-        return h('div', { class: 'mh-panel' }, h('div', { class: 'mh-instr' }, 'اختار شخصيتك السرية: اضغط وجه من اللوحة'),
+        return panel(h('div', { class: 'mh-instr' }, 'اختار شخصيتك السرية: اضغط وجه من اللوحة'),
           h('div', { class: 'btns' }, h('button', { class: 'with-icon arc-flip', onclick: function () { if (send({ type: 'pick', random: true })) S.sent = true; } }, icon('target', 20), 'عشوائي')));
       }
       const oppP = v.players.find(function (p) { return p.id === opp; });
-      return h('div', { class: 'mh-panel' }, h('div', { class: 'mh-wait' }, oppP.picked ? '…' : 'بانتظار ' + nm(opp) + ' يختار شخصيته…'));
+      return panel(wait(oppP.picked ? '…' : 'بانتظار ' + nm(opp) + ' يختار شخصيته…'));
     }
-    if (v.phase !== 'turn') return h('div', { class: 'mh-panel' }, h('div', { class: 'mh-wait' }, '…'));
+    if (v.phase !== 'turn') return panel(wait('…'));
+    // the other player is asking me: only I know my character, so I answer
+    if (free && v.stage === 'answer' && !myTurn) {
+      const pq = v.pending;
+      return panel(
+        h('div', { class: 'mh-qa ask' }, h('span', null, pq.voice ? nm(opp) + ' سألك بالصوت 🎤' : nm(opp) + ' يسأل: ', pq.voice ? null : h('b', { class: 'qt' }, pq.text))),
+        S.sent ? wait('…') : h('div', { class: 'btns' },
+          h('button', { class: 'big mh-ans yes arc-done', onclick: function () { if (send({ type: 'answer', yes: true })) S.sent = true; } }, 'نعم ✓'),
+          h('button', { class: 'big mh-ans no arc-guess', onclick: function () { if (send({ type: 'answer', yes: false })) S.sent = true; } }, 'لا ✗')));
+    }
     if (!myTurn) {
       const la = v.stage === 'flip' ? lastAnswer(v, opp) : null;
-      return h('div', { class: 'mh-panel' },
-        la ? h('div', { class: 'mh-qa theirs' }, h('span', null, nm(opp) + ' سأل: ' + question(la.q).text), h('b', { class: la.yes ? 'yes' : 'no' }, la.yes ? 'نعم' : 'لا'))
-          : h('div', { class: 'mh-wait' }, (v.players.find(function (p) { return p.id === opp; }).bot ? nm(opp) + ' يفكّر…' : 'دور ' + nm(opp) + '…')));
+      const bot = v.players.find(function (p) { return p.id === opp; }).bot;
+      return panel(la ? h('div', { class: 'mh-qa theirs' }, h('span', null, nm(opp) + ' سأل: ' + qText(la)), h('b', { class: ansCls(la.yes) }, ansText(la.yes)))
+        : wait(bot ? nm(opp) + ' يفكّر…' : free ? 'دور ' + nm(opp) + ': ينتظر سؤاله…' : 'دور ' + nm(opp) + '…'));
     }
-    if (S.sent) return h('div', { class: 'mh-panel' }, h('div', { class: 'mh-wait' }, '…'));
+    if (S.sent) return panel(wait('…'));
+    if (free && v.stage === 'answer') return panel(h('div', { class: 'mh-qa' }, h('span', null, 'سؤالك: ' + qText(v.pending))), wait('بانتظار جواب ' + nm(opp) + '…'));
     if (v.stage === 'flip') {
       const la = lastAnswer(v, v.you);
-      return h('div', { class: 'mh-panel' },
-        h('div', { class: 'mh-qa' }, h('span', null, question(la.q).text), h('b', { class: la.yes ? 'yes' : 'no' }, la.yes ? 'نعم ✓' : 'لا ✗')),
-        h('div', { class: 'btns' },
-          h('button', { class: 'with-icon arc-flip', onclick: autoFlip }, icon('flipall', 20), S.elec ? 'اقلب' : 'اقلب المستبعدين'),
-          h('button', { class: 'primary with-icon arc-done', onclick: function () { if (send({ type: 'end_turn' })) S.sent = true; } }, icon('next', 20), S.elec ? 'تم' : 'إنهاء الدور')));
+      return panel(
+        h('div', { class: 'mh-qa' }, h('span', null, qText(la)), h('b', { class: ansCls(la.yes) }, ansText(la.yes) + (la.yes === null ? '' : la.yes ? ' ✓' : ' ✗'))),
+        h('div', { class: 'mh-hint' }, 'اقلب بيدك الوجوه اللي ما تنطبق، وبعدين ' + (S.elec ? 'تم' : 'إنهاء الدور')),
+        h('div', { class: 'btns' }, h('button', { class: 'primary with-icon arc-done', onclick: function () { if (send({ type: 'end_turn' })) S.sent = true; } }, icon('next', 20), S.elec ? 'تم' : 'إنهاء الدور')));
     }
     if (S.guessMode) {
-      return h('div', { class: 'mh-panel' }, h('div', { class: 'mh-instr' }, 'اضغط على الشخصية اللي تظنها هي'),
+      return panel(h('div', { class: 'mh-instr' }, 'اضغط على الشخصية اللي تظنها هي'),
         h('div', { class: 'btns' }, h('button', { class: 'arc-cancel', onclick: function () { S.guessMode = false; render(); } }, 'إلغاء التخمين')));
     }
-    return h('div', { class: 'mh-panel' },
+    if (free) {
+      return panel(askForm(),
+        h('div', { class: 'btns' },
+          h('button', { class: 'with-icon arc-flip', onclick: function () { if (send({ type: 'ask_free', voice: true })) S.sent = true; } }, icon('mic', 20), 'سألت بالصوت'),
+          h('button', { class: 'with-icon mh-guessbtn arc-guess', onclick: function () { S.guessMode = true; render(); } }, icon('target', 20), 'خمّن')));
+    }
+    return panel(
       h('div', { class: 'mh-instr' }, 'دورك: اسأل سؤال أو خمّن'),
       h('div', { class: 'btns' },
         h('button', { class: 'primary big with-icon arc-ask', onclick: function () { S.sheet = 'ask'; render(); } }, icon('ask', 22), 'اسأل'),
@@ -472,11 +552,37 @@
     }
     if (v.phase !== 'turn') return 'انتهت الجولة';
     if (v.currentPlayerId === v.you) {
-      if (v.stage === 'flip') { const la = lastAnswer(v, v.you); return question(la.q).text + ' ← ' + (la.yes ? 'نعم' : 'لا') + ' · اقلب وتم'; }
-      return S.guessMode ? 'اختار الوجه اللي تظنه' : 'دورك: اسأل أو خمّن';
+      if (v.stage === 'flip') { const la = lastAnswer(v, v.you); return qText(la) + ' ← ' + ansText(la.yes) + ' · اقلب بيدك وتم'; }
+      if (v.stage === 'answer') return 'بانتظار جواب ' + nm(opp) + '…';
+      return S.guessMode ? 'اختار الوجه اللي تظنه' : v.options.ask === 'free' ? 'دورك: اكتب سؤالك أو اسأله بالصوت' : 'دورك: اسأل أو خمّن';
     }
-    if (v.stage === 'flip') { const la = lastAnswer(v, opp); if (la) return nm(opp) + ' سأل: ' + question(la.q).text + ' ← ' + (la.yes ? 'نعم' : 'لا'); }
+    if (v.stage === 'answer') return v.pending.voice ? nm(opp) + ' سألك بالصوت: جاوب' : nm(opp) + ' يسأل: ' + v.pending.text;
+    if (v.stage === 'flip') { const la = lastAnswer(v, opp); if (la) return nm(opp) + ' سأل: ' + qText(la) + ' ← ' + ansText(la.yes); }
     return 'دور ' + nm(opp) + '…';
+  }
+
+  function talkButtons(oppP, size) {
+    if (oppP.bot) return null;
+    return [
+      h('button', { class: 'icon-btn mh-talk', 'aria-label': 'الدردشة', onclick: function () { S.sheet = 'chat'; S.unread = 0; render(); } }, icon('chat', size), S.unread ? h('i', { class: 'badge' }, S.unread) : null),
+      call.state === 'idle' ? h('button', { class: 'icon-btn mh-talk', 'aria-label': 'اتصال صوتي', onclick: function () { call.start(); } }, icon('phone', size)) : null,
+    ];
+  }
+
+  // the call, at the top of the screen while it rings or runs
+  function callBar() {
+    if (call.state === 'idle') return call.error ? h('div', { class: 'mh-callbar err', role: 'status' }, h('span', null, call.error), h('button', { class: 'icon-btn', 'aria-label': 'إغلاق', onclick: function () { call.error = ''; render(); } }, icon('close', 18))) : null;
+    const v = S.game;
+    const opp = v ? nm(other(v)) : '';
+    if (call.state === 'ringing') {
+      return h('div', { class: 'mh-callbar ring', role: 'alert' }, icon('phone', 20), h('span', null, opp + ' يتصل بيك…'),
+        h('button', { class: 'ok', onclick: function () { call.accept(); } }, 'رد'), h('button', { class: 'no', onclick: function () { call.decline(); } }, 'رفض'));
+    }
+    const secs = call.since ? Math.floor((Date.now() - call.since) / 1000) : 0;
+    const label = call.state === 'calling' ? 'نتصل بـ ' + opp + '…' : call.state === 'connecting' ? 'نوصل الصوت…' : '🔊 مكالمة وية ' + opp + ' · ' + Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0');
+    return h('div', { class: 'mh-callbar' + (call.state === 'live' ? ' live' : ''), role: 'status' }, h('span', { id: 'mh-calltime' }, label),
+      call.state === 'live' ? h('button', { class: 'icon-btn' + (call.muted ? ' on' : ''), 'aria-label': call.muted ? 'شغّل المايك' : 'اكتم المايك', onclick: function () { call.mute(); } }, icon(call.muted ? 'micoff' : 'mic', 18)) : null,
+      h('button', { class: 'no', onclick: function () { call.hangup(); } }, icon('hang', 18), 'إنهاء'));
   }
 
   function elecScreen() {
@@ -493,6 +599,7 @@
       h('div', { class: 'plate' }, h('b', null, 'منو هو؟'), h('small', null, 'ELECTRONIC')),
       h('div', { class: 'leds' }, led('أنت', myTurn, 'g'), led(oppP.name, v.phase === 'turn' && !myTurn, 'r')),
       h('div', { class: 'devbtns' },
+        talkButtons(oppP, 20),
         h('button', { class: 'icon-btn', 'aria-label': 'الأسئلة', onclick: function () { S.sheet = 'log'; render(); } }, icon('list', 20)),
         h('button', { class: 'icon-btn', 'aria-label': 'القائمة', onclick: function () { S.sheet = 'menu'; render(); } }, icon('menu', 20))));
     const lcd = h('div', { class: 'mh-lcd' + (flash ? ' flash ' + flash.cls : ''), 'aria-live': 'polite', 'data-seat': opp },
@@ -511,7 +618,7 @@
       actionPanel(v),
       reactButton());
     return h('div', { class: 'mh-app mh-elec seat-' + v.playerIds.indexOf(v.you) },
-      h('div', { class: 'mh-dev' }, top, lcd, h('div', { class: 'mh-tray' }, board), deck),
+      h('div', { class: 'mh-dev' }, top, lcd, callBar(), h('div', { class: 'mh-tray' }, board), deck),
       S.reacts ? h('div', { class: 'mh-reactwrap' }, reactRow()) : null);
   }
 
@@ -528,6 +635,7 @@
       h('span', { class: 'mh-timer' + (myTurn ? '' : ' other') + (myTurn && left !== null && left <= 10 ? ' low' : ''), id: 'mh-timer' },
         left === null || (v.phase !== 'turn' && v.phase !== 'pick') ? null : [icon('clock', 18), h('span', { class: 'num' }, Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0'))]),
       h('span', { class: 'mh-topbtns' },
+        talkButtons(oppP, 22),
         h('button', { class: 'icon-btn', 'aria-label': 'الأسئلة', onclick: function () { S.sheet = 'log'; render(); } }, icon('list')),
         h('button', { class: 'icon-btn', 'aria-label': 'القائمة', onclick: function () { S.sheet = 'menu'; render(); } }, icon('menu'))));
     const oppStrip = h('div', { class: 'mh-opp' + (v.currentPlayerId === opp ? ' turn' : '') + (oppP.connected ? '' : ' off'), 'data-seat': opp },
@@ -545,7 +653,7 @@
         secretMini(v), h('span', { class: 'lbl' }, 'شخصيتك', h('b', null, v.secret === null ? '؟' : CH()[v.secret].name))),
       actionPanel(v),
       reactButton());
-    return h('div', { class: 'mh-app' }, top, oppStrip, h('div', { class: 'mh-boardwrap' }, board), S.reacts ? h('div', { class: 'mh-reactwrap' }, reactRow()) : null, mine);
+    return h('div', { class: 'mh-app' }, top, oppStrip, callBar(), h('div', { class: 'mh-boardwrap' }, board), S.reacts ? h('div', { class: 'mh-reactwrap' }, reactRow()) : null, mine);
   }
 
   function resultSheet() {
@@ -605,16 +713,14 @@
     const groups = [];
     QS().forEach(function (q) { let g = groups.find(function (x) { return x.name === q.group; }); if (!g) { g = { name: q.group, list: [] }; groups.push(g); } g.list.push(q); });
     // how many faces still up would say yes: a hint of how useful the question is
-    const up = []; for (let i = 0; i < N; i++) if (S.down.indexOf(i) < 0) up.push(i);
     return sheet('اختار سؤالك', h('div', { class: 'mh-asklist' }, groups.map(function (g) {
       return h('div', { class: 'mh-qgroup' }, h('div', { class: 'gname' }, g.name), h('div', { class: 'chips' }, g.list.map(function (q) {
         const done = Object.prototype.hasOwnProperty.call(mine, q.id);
-        const yes = up.filter(function (i) { return matches(i, q); }).length;
         return h('button', {
-          class: 'mh-qchip' + (done ? ' done ' + (mine[q.id] ? 'yes' : 'no') : '') + (!done && (yes === 0 || yes === up.length) ? ' useless' : ''),
+          class: 'mh-qchip' + (done ? ' done ' + (mine[q.id] ? 'yes' : 'no') : ''),
           disabled: done,
           onclick: function () { S.sheet = null; if (send({ type: 'ask', q: q.id })) S.sent = true; },
-        }, q.text, done ? h('b', null, mine[q.id] ? ' نعم' : ' لا') : h('small', null, yes + '/' + up.length));
+        }, q.text, done ? h('b', null, mine[q.id] ? ' نعم' : ' لا') : null);
       })));
     })), closeSheet);
   }
@@ -652,10 +758,33 @@
       h('p', { class: 'center dim' }, 'خصمك يحاول يعرف إنها ', h('b', null, c.name), '. الخادم يجاوب أسئلته عنها بالصدق.')), closeSheet);
   }
 
+  function chatSheet() {
+    const v = S.game;
+    S.unread = 0;
+    const input = h('input', {
+      id: 'mh-chatin', type: 'text', maxlength: C.CHAT_MAX, placeholder: 'اكتب رسالة…', value: S.chatDraft, autocomplete: 'off',
+      oninput: function (e) { S.chatDraft = e.target.value; },
+      onfocus: function () { S.focus = 'chat'; },
+      onblur: function () { if (S.focus === 'chat') S.focus = null; },
+    });
+    const list = (v.chat || []).slice(-40);
+    return sheet('الدردشة', h('div', { class: 'mh-chat' },
+      list.length ? h('ol', { class: 'msgs' }, list.map(function (m) {
+        return h('li', { class: m.by === v.you ? 'mine' : '' }, h('small', null, m.by === v.you ? 'أنت' : nm(m.by)), h('span', null, m.text));
+      })) : h('div', { class: 'dim center' }, 'ما في رسائل بعد. سلّم على خصمك 👋'),
+      h('form', { class: 'mh-askform', onsubmit: function (e) {
+        e.preventDefault();
+        const t = S.chatDraft.trim();
+        if (!t) return;
+        if (send({ type: 'chat', text: t })) { S.chatDraft = ''; S.focus = 'chat'; }
+      } }, input, h('button', { class: 'primary with-icon', type: 'submit' }, icon('send', 18), 'إرسال')),
+      v.options.ask === 'free' ? h('div', { class: 'dim small center' }, 'الأسئلة تنكتب بخانة السؤال بدورك، مو هنا.') : null), closeSheet);
+  }
+
   function logSheet() {
     const v = S.game;
     return sheet('الأسئلة', v.asked.length ? h('ol', { class: 'mh-log' }, v.asked.slice().reverse().map(function (a) {
-      return h('li', { class: a.by === v.you ? 'mine' : '' }, h('span', { class: 'who' }, a.by === v.you ? 'أنت' : nm(a.by)), h('span', { class: 'q' }, question(a.q).text), h('b', { class: a.yes ? 'yes' : 'no' }, a.yes ? 'نعم' : 'لا'));
+      return h('li', { class: a.by === v.you ? 'mine' : '' }, h('span', { class: 'who' }, a.by === v.you ? 'أنت' : nm(a.by)), h('span', { class: 'q' }, qText(a)), h('b', { class: ansCls(a.yes) }, ansText(a.yes)));
     })) : h('div', { class: 'dim center' }, 'لا أسئلة بعد.'), closeSheet);
   }
 
@@ -679,10 +808,11 @@
     const li = function (t) { return h('li', null, t); };
     return sheet('طريقة اللعب', h('div', { class: 'menu-list' }, h('ul', { class: 'help-list' },
       li('كل لاعب عنده شخصية سرية من 24 شخصية. هدفك تعرف شخصية خصمك قبل ما يعرف شخصيتك.'),
-      li('في دورك اسأل سؤال جوابه نعم أو لا ("لابس نظارات؟"). الخادم يجاوب بالصدق عن شخصية خصمك.'),
-      li('بعد الجواب اقلب الوجوه اللي ما تنطبق (اضغطها، أو "اقلب المستبعدين")، ثم "إنهاء الدور".'),
+      li('ضد صديق: بدورك اكتب سؤالك بخانة السؤال، أو اتصل بيه 📞 واسأله بصوتك واضغط "سألت بالصوت". هو يجاوب بزر نعم أو لا، لأنه بس هو يعرف شخصيته.'),
+      li('ضد الكمبيوتر: اختار سؤالك من القائمة، والخادم يجاوب بالصدق.'),
+      li('بعد الجواب اقلب بيدك الوجوه اللي ما تنطبق (اضغط على كل وجه)، ثم "إنهاء الدور".'),
       li('بدل السؤال تقدر "تخمّن": إذا صح تفوز بالجولة، وإذا غلط تخسرها.'),
-      li('الرقم الصغير جنب كل سؤال: كم وجه من الباقين عندك جوابه نعم. الأسئلة اللي تقسم الوجوه نصين هي الأحسن.'),
+      li('الدردشة 💬 والمكالمة 📞 مفتوحة طول المباراة، والصوت يروح مباشرة بين جهازيكم.'),
       li('لكل دور ' + C.TURN_SECONDS + ' ثانية، وإذا خلص الوقت يروح الدور.'))), closeSheet);
   }
   function disconnectSheet(now) {
@@ -713,6 +843,8 @@
     if (v && v.phase === 'turn' && S.sheet === 'guess') overlays.push(guessSheet());
     if (v && S.sheet === 'secret') { const ss = secretSheet(); if (ss) overlays.push(ss); }
     if (v && S.sheet === 'log') overlays.push(logSheet());
+    if (v && S.sheet === 'chat') overlays.push(chatSheet());
+
     if (v && S.sheet === 'menu') overlays.push(menuSheet());
     if (S.sheet === 'help') overlays.push(helpSheet());
     if (S.you && S.status !== 'open' && S.disconnectedAt && now - S.disconnectedAt > 3000) overlays.push(disconnectSheet(now));
@@ -722,6 +854,12 @@
     overlays.forEach(function (o) { nodes.push(o); });
     if (S.toast) nodes.push(h('div', { class: 'toast' + (S.toast.ok ? ' ok' : ''), role: 'alert' }, S.toast.text));
     rootEl.replaceChildren.apply(rootEl, nodes);
+    if (S.focus) {
+      const f = document.getElementById(S.focus === 'ask' ? 'mh-askin' : 'mh-chatin');
+      if (f) { f.focus(); try { f.setSelectionRange(f.value.length, f.value.length); } catch (e) { /* ignore */ } }
+    }
+    const msgs = document.querySelector('.mh-chat .msgs');
+    if (msgs) msgs.scrollTop = msgs.scrollHeight;
   }
 
   setInterval(function () {
@@ -732,6 +870,11 @@
       if (num && s !== null) num.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
     }
     if (S.lcd && S.lcd.until <= Date.now()) { S.lcd = null; render(); }
+    const ct = document.getElementById('mh-calltime');
+    if (ct && call.state === 'live' && call.since) {
+      const cs = Math.floor((Date.now() - call.since) / 1000);
+      ct.textContent = '🔊 مكالمة وية ' + (S.game ? nm(other(S.game)) : '') + ' · ' + Math.floor(cs / 60) + ':' + String(cs % 60).padStart(2, '0');
+    }
     const nx = document.getElementById('mh-next');
     if (nx && S.nextEnd) nx.textContent = 'الجولة التالية بعد ' + secondsOf(S.nextEnd) + ' ثانية…';
     if (S.status !== 'open' && Date.now() - (S.lastSlow || 0) > 1000) { S.lastSlow = Date.now(); render(); }

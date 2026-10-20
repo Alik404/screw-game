@@ -373,3 +373,69 @@ body:has(.mh-app), body:has(.mh-shell) {
 .mh-setpick[aria-pressed="true"] b { color: var(--brass); }
 .mh-setpick:disabled { opacity: 1; cursor: default; }
 .mh-review h2 { color: var(--brass); text-align: center; margin: var(--s6) 0 0; }
+
+/* ---------- free questions, answers, chat, the voice call ---------- */
+.mh-askform { display: flex; gap: var(--s2); }
+.mh-askform input { flex: 1; min-width: 0; min-height: 48px; font-size: var(--fs-2); }
+.mh-askform button { flex: none; min-width: 92px; }
+.mh-hint { text-align: center; color: var(--text-dim); font-size: var(--fs-1); }
+.mh-qa.ask { border: 2px solid var(--brass); font-size: var(--fs-2); flex-wrap: wrap; }
+.mh-qa.ask .qt { color: var(--text); font-size: var(--fs-3); }
+.mh-qa b.none, .mh-log b.none { background: var(--text-dim); }
+.mh-ans { font-weight: 800; font-size: var(--fs-3); border: 0; color: var(--ink); }
+.mh-ans.yes { background: var(--mh-yes); }
+.mh-ans.no { background: var(--mh-no); }
+.mh-talk { position: relative; }
+.mh-talk .badge { position: absolute; top: 2px; inset-inline-end: 2px; min-width: 18px; height: 18px; border-radius: 999px; background: var(--red); color: var(--paper); font-size: 11px; font-style: normal; font-weight: 700; display: grid; place-items: center; padding: 0 4px; }
+.mh-elec .mh-askform input { background: linear-gradient(180deg, var(--mh-lcd), var(--mh-lcd-2)); color: var(--mh-lcd-ink); border: 3px solid var(--mh-bezel); border-radius: 12px; font-weight: 700; }
+.mh-elec .mh-askform input::placeholder { color: color-mix(in srgb, var(--mh-lcd-ink) 55%, transparent); }
+.mh-elec .mh-askform button {
+  --arc: var(--mh-arc-y); border: 0; border-radius: 999px; min-height: 50px; color: var(--ink); font-weight: 800;
+  background: radial-gradient(circle at 35% 25%, color-mix(in srgb, var(--paper) 55%, var(--arc)), var(--arc) 55%, color-mix(in srgb, var(--ink) 25%, var(--arc)));
+  box-shadow: 0 5px 0 color-mix(in srgb, var(--ink) 45%, var(--arc)), 0 9px 14px color-mix(in srgb, var(--ink) 45%, transparent), inset 0 2px 0 color-mix(in srgb, var(--paper) 60%, transparent);
+}
+.mh-elec .mh-askform button:active { transform: translateY(4px); }
+.mh-elec .mh-hint { color: color-mix(in srgb, var(--paper) 80%, transparent); }
+
+.mh-callbar {
+  position: fixed; top: calc(8px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); z-index: 80; display: flex; align-items: center; gap: var(--s2);
+  padding: 6px 8px 6px 14px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 88%, transparent); color: var(--paper); box-shadow: var(--shadow);
+  border: 2px solid color-mix(in srgb, var(--paper) 15%, transparent); max-width: calc(100vw - 16px); font-weight: 700; font-size: var(--fs-2); white-space: nowrap;
+}
+.mh-callbar span { overflow: hidden; text-overflow: ellipsis; }
+.mh-callbar.live { border-color: var(--mh-yes); }
+.mh-callbar.ring { border-color: var(--mh-yes); animation: mh-ring 1s ease-in-out infinite; }
+.mh-callbar.err { border-color: var(--red); white-space: normal; font-weight: 500; }
+.mh-callbar button { min-height: 36px; border-radius: 999px; padding: 0 var(--s3); font-weight: 700; border: 0; display: inline-flex; align-items: center; gap: 4px; }
+.mh-callbar .ok { background: var(--mh-yes); color: var(--ink); }
+.mh-callbar .no { background: var(--red); color: var(--paper); }
+.mh-callbar .icon-btn { width: 36px; color: var(--paper); background: color-mix(in srgb, var(--paper) 12%, transparent); }
+.mh-callbar .icon-btn.on { background: var(--red); }
+@keyframes mh-ring { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--mh-yes) 35%, transparent); } }
+
+.mh-chatpop { position: fixed; z-index: 74; transform: translateX(-50%); max-width: min(320px, 90vw); background: var(--paper); color: var(--ink); border-radius: 14px; padding: var(--s2) var(--s3); box-shadow: var(--shadow); font-size: var(--fs-2); pointer-events: none; animation: mh-pop 3.5s ease-out forwards; }
+@keyframes mh-pop { 0% { opacity: 0; transform: translate(-50%, -8px); } 8%, 85% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; } }
+.mh-chat { display: flex; flex-direction: column; gap: var(--s3); }
+.mh-chat .msgs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s2); max-height: 46vh; overflow-y: auto; }
+.mh-chat .msgs li { align-self: flex-start; max-width: 82%; background: var(--table); border-radius: 14px 14px 14px 4px; padding: var(--s1) var(--s3) var(--s2); display: flex; flex-direction: column; }
+.mh-chat .msgs li.mine { align-self: flex-end; background: color-mix(in srgb, var(--brass) 30%, var(--table)); border-radius: 14px 14px 4px 14px; }
+.mh-chat .msgs small { font-size: 11px; color: var(--text-dim); }
+.mh-chat .msgs span { overflow-wrap: anywhere; }
+
+/* phones: the question box gets the whole width; the top row keeps the name readable; the call bar sits under it */
+@media (max-width: 600px) {
+  .mh-askform { flex-wrap: wrap; }
+  .mh-askform input { flex: 1 1 100%; }
+  .mh-askform button { flex: 1 1 100%; min-height: 46px; }
+  .mh-elec .mh-deck { align-items: flex-end; }
+  .mh-devtop { gap: var(--s2); padding: 0 var(--s2); }
+  .mh-devtop .grille { display: none; }
+  .mh-devtop .plate b { font-size: var(--fs-3); white-space: nowrap; }
+  .mh-devtop .icon-btn { width: 34px; height: 34px; min-height: 34px; }
+  .mh-devtop .devbtns { gap: 2px; }
+}
+/* the call bar sits in the page (under the screen), so it never covers a button */
+.mh-callbar { position: static; transform: none; align-self: center; margin: 0 auto; }
+/* during a call the board leaves room for the call bar */
+.mh-dev:has(.mh-callbar) .mh-board, .mh-app:has(.mh-callbar) .mh-board { width: min(100%, calc((100dvh - 480px) / 4 * 0.78 * 6 + 40px)); }
+@media (min-aspect-ratio: 4/3) { .mh-dev:has(.mh-callbar) .mh-board, .mh-app:has(.mh-callbar) .mh-board { width: min(100%, calc((100dvh - 440px) / 3 * 0.78 * 8 + 60px)); } }

@@ -69,20 +69,72 @@ test('minhu room: two players; each gets only their own secret over the wire', (
   });
 });
 
-test('asking through the protocol; questions and answers are seen by both', () => {
+test('two people: free questions (typed or by voice), the other player answers, flipping is by hand', () => {
   const L = lobby(2);
   L.host.say({ type: 'start_game' });
+  assert.equal(stateOf(L.host).options.ask, 'free');
   const cur = connOf(L, stateOf(L.host).currentPlayerId);
   const other = L.all.find((c) => c !== cur);
-  cur.say({ type: 'ask', q: 'glasses' });
-  const ev = other.events('ask').pop();
-  assert.equal(ev.q, 'glasses');
-  assert.equal(typeof ev.yes, 'boolean');
+  assert.match(errOf(cur.say({ type: 'ask', q: 'glasses' })), /بالدردشة أو بالصوت/);
+  assert.match(errOf(cur.say({ type: 'ask_free', text: '   ' })), /اكتب سؤالك/);
+  cur.say({ type: 'ask_free', text: 'هل <b>شخصيتك</b> تلبس نظارة؟' });
+  const q = other.events('question').pop();
+  assert.equal(q.text, 'هل bشخصيتك/b تلبس نظارة؟', 'angle brackets are removed');
+  assert.equal(stateOf(other).stage, 'answer');
+  assert.equal(stateOf(other).timer.kind, 'turn', 'the clock is the answerer\'s now');
+  assert.match(errOf(cur.say({ type: 'answer', yes: true })), /ليس دورك/, 'the asker cannot answer');
+  assert.match(errOf(other.say({ type: 'answer', yes: 'maybe' })), /نعم أو لا/);
+  other.say({ type: 'answer', yes: false });
+  assert.equal(cur.events('answer').pop().yes, false);
+  assert.equal(stateOf(cur).stage, 'flip');
+  assert.equal(stateOf(cur).asked[0].text, q.text);
   cur.say({ type: 'flip', ids: [0, 5] });
   assert.equal(stateOf(other).players.find((p) => p.id === cur.last('joined').you).down, 2);
   cur.say({ type: 'end_turn' });
   assert.equal(stateOf(other).currentPlayerId, other.last('joined').you);
-  assert.match(errOf(cur.say({ type: 'guess', char: 3 })), /ليس دورك/);
+  // a question said in the voice call
+  other.say({ type: 'ask_free', voice: true });
+  assert.equal(cur.events('question').pop().voice, true);
+  cur.say({ type: 'answer', yes: true });
+  assert.equal(stateOf(other).asked.pop().voice, true);
+});
+
+test('chat: both players see it, it survives a reconnect; an answer that never comes runs out', () => {
+  const L = lobby(2);
+  L.host.say({ type: 'start_game' });
+  L.host.say({ type: 'chat', text: 'يلا نشوف منو أشطر 😄' });
+  assert.equal(L.others[0].events('chat').pop().text, 'يلا نشوف منو أشطر 😄');
+  assert.match(errOf(L.host.say({ type: 'chat', text: '' })), /اكتب رسالة/);
+  const g = L.others[0].last('joined');
+  L.others[0].drop();
+  const back = L.h.conn().say({ type: 'join_room', code: L.code, playerId: g.playerId });
+  assert.equal(stateOf(back).chat[0].text, 'يلا نشوف منو أشطر 😄');
+  const cur = connOf({ all: [L.host, back] }, stateOf(L.host).currentPlayerId);
+  cur.say({ type: 'ask_free', text: 'رجّال؟' });
+  L.h.clock.advance(C.ANSWER_SECONDS * 1000);
+  const ev = cur.events('answer').pop();
+  assert.equal(ev.yes, null);
+  assert.equal(ev.auto, true);
+  assert.equal(stateOf(cur).stage, 'flip');
+});
+
+test('voice call: the setup is passed to the other player only; other games refuse it', () => {
+  const L = lobby(2);
+  L.host.say({ type: 'rtc', data: { kind: 'offer', sdp: 'v=0' } });
+  const got = L.others[0].last('rtc');
+  assert.deepEqual(got, { type: 'rtc', from: L.host.last('joined').you, data: { kind: 'offer', sdp: 'v=0' } });
+  assert.equal(L.host.all('rtc').length, 0, 'not echoed back');
+  assert.match(errOf(L.host.say({ type: 'rtc', data: 'x' })), /غير صالحة/);
+  const h = harness();
+  const sc = h.conn().say({ type: 'create_room', name: 'أحمد', game: 'seven' });
+  assert.match(errOf(sc.say({ type: 'rtc', data: { kind: 'offer' } })), /غير متاحة/);
+});
+
+test('against the computer the questions stay on the list', () => {
+  const L = lobby(1);
+  L.host.say({ type: 'add_bot' });
+  L.host.say({ type: 'start_game' });
+  assert.equal(stateOf(L.host).options.ask, 'list');
 });
 
 test('choosing through the protocol: picks stay secret, the round starts when both have chosen', () => {

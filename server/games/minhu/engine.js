@@ -16,6 +16,11 @@
     badChar: 'شخصية غير معروفة.',
     badOptions: 'خيارات اللعبة غير صالحة.',
     picked: 'اخترت شخصيتك.',
+    emptyQuestion: 'اكتب سؤالك أولاً.',
+    emptyChat: 'اكتب رسالة.',
+    listOnly: 'اختار سؤال من القائمة.',
+    freeOnly: 'اسأل خصمك بالدردشة أو بالصوت.',
+    badAnswer: 'جاوب بنعم أو لا.',
   };
   const N = CONFIG.CHARACTERS.length; // every set has the same number of characters (a test checks it)
 
@@ -44,7 +49,7 @@
 
   // the characters still possible for pid, from the answers to pid's own questions
   function candidates(s, pid) {
-    const mine = s.asked.filter(function (a) { return a.by === pid; });
+    const mine = s.asked.filter(function (a) { return a.by === pid && a.q; });
     const out = [];
     for (let i = 0; i < N; i++) {
       if (mine.every(function (a) { return matches(i, question(a.q, s.options.set), s.options.set) === a.yes; })) out.push(i);
@@ -59,7 +64,9 @@
       level: o.level === undefined ? CONFIG.DEFAULT_LEVEL : o.level,
       set: o.set === undefined ? CONFIG.DEFAULT_SET : o.set,
       pick: o.pick === undefined ? CONFIG.DEFAULT_PICK : o.pick,
+      ask: o.ask === undefined ? CONFIG.DEFAULT_ASK : o.ask,
     };
+    if (CONFIG.ASKS.indexOf(out.ask) < 0) return null;
     if (CONFIG.PICKS.indexOf(out.pick) < 0) return null;
     if (CONFIG.SET_OPTIONS.indexOf(out.set) < 0) return null;
     if (CONFIG.TARGETS.indexOf(out.target) < 0 || CONFIG.LEVELS.indexOf(out.level) < 0) return null;
@@ -94,6 +101,7 @@
     s.down = {};
     s.playerIds.forEach(function (id) { s.down[id] = []; });
     s.asked = [];
+    s.pending = null;
     s.current = s.round === 1 ? Math.floor(r() * 2) : 1 - s.starter;
     s.starter = s.current;
     s.turnCount = 0;
@@ -130,6 +138,7 @@
       winnerIds: null,
       endedEarly: false,
       seq: 0,
+      chat: [],
     };
     playerIds.forEach(function (id) { s.scores[id] = 0; });
     const ctx = { s: s, events: [] };
@@ -187,10 +196,56 @@
     if (s.playerIds.every(function (id) { return s.secrets[id] !== null; })) beginPlay(ctx);
   };
 
+  // text from a player: no control characters or angle brackets, spaces folded, cut to a length
+  function clean(t, max) {
+    if (typeof t !== 'string') return '';
+    return t.replace(/[\u0000-\u001f\u007f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, max);
+  }
+
+  // free questions (two people): typed in the chat, or said in the voice call ("voice")
+  H.ask_free = function (ctx, pid, a) {
+    const s = ctx.s;
+    const err = needTurn(s, pid, 'ask');
+    if (err) return err;
+    if (s.options.ask !== 'free') return ERR.listOnly;
+    const text = clean(a.text, CONFIG.QUESTION_MAX);
+    if (!text && !a.voice) return ERR.emptyQuestion;
+    s.pending = { by: pid, text: text, voice: !!a.voice && !text };
+    s.stage = 'answer';
+    s.seq += 1;
+    ctx.events.push({ type: 'question', playerId: pid, text: text, voice: s.pending.voice });
+  };
+
+  // the other player answers (only they know their character)
+  H.answer = function (ctx, pid, a) {
+    const s = ctx.s;
+    if (s.phase !== 'turn' || s.stage !== 'answer') return ERR.wrongStage;
+    if (pid === curId(s)) return ERR.notYourTurn;
+    if (typeof a.yes !== 'boolean') return ERR.badAnswer;
+    const p = s.pending;
+    s.asked.push({ by: p.by, text: p.text, voice: p.voice, yes: a.yes });
+    s.pending = null;
+    s.stage = 'flip';
+    s.seq += 1;
+    ctx.events.push({ type: 'answer', playerId: pid, yes: a.yes, text: p.text, voice: p.voice });
+  };
+
+  // talk any time during the match
+  H.chat = function (ctx, pid, a) {
+    const s = ctx.s;
+    const text = clean(a.text, CONFIG.CHAT_MAX);
+    if (!text) return ERR.emptyChat;
+    s.chat.push({ by: pid, text: text });
+    if (s.chat.length > CONFIG.CHAT_KEEP) s.chat.splice(0, s.chat.length - CONFIG.CHAT_KEEP);
+    s.seq += 1;
+    ctx.events.push({ type: 'chat', playerId: pid, text: text });
+  };
+
   H.ask = function (ctx, pid, a) {
     const s = ctx.s;
     const err = needTurn(s, pid, 'ask');
     if (err) return err;
+    if (s.options.ask !== 'list') return ERR.freeOnly;
     const q = question(a.q, s.options.set);
     if (!q) return ERR.badQuestion;
     if (s.asked.some(function (x) { return x.by === pid && x.q === q.id; })) return ERR.asked;
@@ -285,6 +340,16 @@
       const s = ctx.s;
       const pid = curId(s);
       const isBot = s.bots.indexOf(pid) >= 0;
+      if (s.stage === 'answer') {
+        // the other player did not answer in time: no answer, the asker goes on
+        const p = s.pending;
+        s.asked.push({ by: p.by, text: p.text, voice: p.voice, yes: null });
+        s.pending = null;
+        s.stage = 'flip';
+        s.seq += 1;
+        ctx.events.push({ type: 'answer', playerId: other(s, pid), yes: null, text: p.text, voice: p.voice, auto: true });
+        return null;
+      }
       if (!isBot) {
         ctx.events.push({ type: 'timeout', playerId: pid });
         s.seq += 1;
@@ -350,6 +415,8 @@
       secret: s.secrets[playerId],
       down: s.down[playerId].slice(),
       asked: clone(s.asked),
+      pending: s.pending ? clone(s.pending) : null,
+      chat: clone(s.chat || []),
       scores: clone(s.scores),
       round: s.round,
       seq: s.seq,

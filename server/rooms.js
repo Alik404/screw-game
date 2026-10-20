@@ -28,6 +28,7 @@ const MSG = {
   noBot: 'لاعب الكمبيوتر غير موجود.',
   noOptions: 'هذه اللعبة ليس لها خيارات.',
   badReaction: 'تفاعل غير معروف.',
+  noVoice: 'المكالمة غير متاحة في هذه اللعبة.',
 };
 
 function createRooms(opts) {
@@ -372,6 +373,18 @@ function createRooms(opts) {
     if (me.lastReact && t - me.lastReact < CONFIG.REACTION_COOLDOWN_MS) return; // too fast: silently dropped
     me.lastReact = t;
     broadcast(room, { type: 'reaction', from: me.seat, id: m.id });
+  };
+
+  // a private voice call: offers, answers and network candidates go to the other players in the room as they are;
+  // the sound itself flows directly between the browsers (WebRTC), never through the server
+  handlers.rtc = function (conn, m) {
+    const room = conn.room;
+    if (!room) return err(conn, MSG.notIn);
+    if (!gameOf(room).voice) return err(conn, MSG.noVoice);
+    if (!m.data || typeof m.data !== 'object' || typeof m.data.kind !== 'string') return err(conn, MSG.badMessage);
+    const me = byConn(room, conn);
+    const msg = { type: 'rtc', from: me.seat, data: m.data };
+    room.players.forEach(function (p) { if (p !== me && p.conn) sendTo(p.conn, msg); });
   };
 
   handlers.start_game = function (conn, m) {

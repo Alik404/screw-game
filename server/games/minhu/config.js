@@ -211,6 +211,14 @@
     DEFAULT_PICK: 'random', // the engine's default; the lobby suggests 'choose'
     LOBBY_PICK: 'choose',
     PICK_SECONDS: 30, // then a random one is chosen for whoever has not picked
+    // how questions are asked: 'free' between two people (typed in the chat or said in the voice call, the
+    // other player answers yes / no), 'list' against the computer (the server answers from the table)
+    ASKS: ['free', 'list'],
+    DEFAULT_ASK: 'list',
+    QUESTION_MAX: 120, // characters in a typed question
+    CHAT_MAX: 160, // characters in a chat message
+    CHAT_KEEP: 60, // messages kept for a player who reconnects
+    ANSWER_SECONDS: 45, // the other player answers within this time
     TARGETS: [1, 2, 3], // rounds needed to win the match
     DEFAULT_TARGET: 2,
     LEVELS: ['easy', 'smart'],
