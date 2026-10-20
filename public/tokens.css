@@ -224,6 +224,22 @@
   --mh-arc-g: #3ddc84;
   --mh-arc-k: #b9bec7;
   --mh-metal: #d9dde3;
+  /* minhu boards: monsters and robots */
+  --mh-mon-green: #7bd96a;
+  --mh-mon-purple: #a77cf0;
+  --mh-mon-orange: #ffa04d;
+  --mh-mon-blue: #58b6ff;
+  --mh-mon-pink: #ff8ec4;
+  --mh-mon-yellow: #ffd84d;
+  --mh-mon-horn: #fff1d6;
+  --mh-mon-mouth: #5a1f2c;
+  --mh-mon-tongue: #ff6f8f;
+  --mh-rob-silver: #c9d1dc;
+  --mh-rob-red: #e86a5e;
+  --mh-rob-blue: #6aa7ee;
+  --mh-rob-gold: #e8c158;
+  --mh-rob-glow: #5ff2ff;
+  --mh-rob-patch: #f2c6a0;
 
   /* spacing scale: multiples of 4px */
   --s1: 4px;

@@ -25,6 +25,43 @@ test('the cast: 24 characters, no two answer every question the same way, every 
   });
 });
 
+test('every set: 24 characters, all different by their answers, every question splits them', () => {
+  assert.deepEqual(C.SET_OPTIONS.slice().sort(), Object.keys(C.SETS).sort());
+  C.SET_OPTIONS.forEach((set) => {
+    const S = C.SETS[set];
+    assert.equal(S.characters.length, 24, set);
+    assert.equal(new Set(S.characters.map((c) => c.name)).size, 24, set + ': names');
+    const sig = S.characters.map((c, i) => S.questions.map((q) => (E.matches(i, q, set) ? 1 : 0)).join(''));
+    assert.equal(new Set(sig).size, 24, set + ': two characters cannot be told apart');
+    S.questions.forEach((q) => {
+      const yes = S.characters.filter((c, i) => E.matches(i, q, set)).length;
+      assert.ok(yes >= 1 && yes <= 23, set + '/' + q.id + ' is useless');
+    });
+    assert.equal(new Set(S.questions.map((q) => q.id)).size, S.questions.length, set + ': question ids');
+  });
+});
+
+test('the set is a lobby option; questions belong to the chosen set', () => {
+  assert.equal(game().options.set, 'people');
+  assert.equal(E.createGame(['a', 'b'], { set: 'planets' }).error, E.ERR.badOptions);
+  const s = E.createGame(['a', 'b'], { seed: 2, set: 'robots' }).state;
+  const p = cur(s);
+  assert.equal(E.act(s, p, { type: 'ask', q: 'beard' }).error, E.ERR.badQuestion, 'a people question on the robots board');
+  const r = E.act(s, p, { type: 'ask', q: 'antenna' });
+  assert.equal(r.events[0].yes, C.SETS.robots.characters[s.secrets[opp(s, p)]].top === 'antenna');
+});
+
+test('the smart computer plays every set well', () => {
+  C.SET_OPTIONS.forEach((set) => {
+    for (let seed = 1; seed <= 15; seed++) {
+      let s = E.createGame(['x', 'y'], { seed, set, bots: ['x', 'y'], target: 1 }).state;
+      let n = 0;
+      while (s.phase === 'turn') { s = E.autoPlay(s).state; assert.ok(++n < 200); }
+      assert.equal(s.result.reason, 'right', set);
+    }
+  });
+});
+
 test('a round: different secrets, ask (answered from the secret), flip, end the turn', () => {
   let s = game();
   assert.notEqual(s.secrets.a, s.secrets.b);

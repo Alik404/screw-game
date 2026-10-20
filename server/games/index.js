@@ -398,7 +398,7 @@ const minhu = {
   botName: MINHU_CONFIG.BOT_NAME,
   startOptions: function (m) {
     const o = m && m.options && typeof m.options === 'object' ? m.options : {};
-    return { target: o.target, level: o.level };
+    return { target: o.target, level: o.level, set: o.set };
   },
   checkOptions: function (o) { return MINHU.readOptions(o) ? null : MINHU.ERR.badOptions; },
   create: function (seats, options, extra) {

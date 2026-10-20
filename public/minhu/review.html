@@ -3,23 +3,32 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>منو هو؟ - الوجوه</title>
+<title>منو هو؟ - كل الوجوه</title>
 <link rel="stylesheet" href="/tokens.css">
 <link rel="stylesheet" href="/style.css">
 <link rel="stylesheet" href="/minhu/minhu.css">
 </head>
-<body>
-<div class="mh-sheet-grid" id="grid"></div>
+<body class="mh-review">
+<div id="all"></div>
 <script src="/server/games/minhu/config.js"></script>
 <script src="/minhu/faces.js"></script>
 <script>
   MinhuFaces.ensureDefs();
-  const g = document.getElementById('grid');
-  MinhuConfig.CHARACTERS.forEach(function (c, i) {
-    const b = document.createElement('div');
-    b.className = 'mh-card bg-' + c.bg;
-    b.innerHTML = '<div class="inner"><div class="front"><div class="pic">' + MinhuFaces.face(i) + '</div><div class="name">' + c.name + '</div></div><div class="back">؟</div></div>';
-    g.append(b);
+  const all = document.getElementById('all');
+  MinhuConfig.SET_OPTIONS.forEach(function (set) {
+    const S = MinhuConfig.SETS[set];
+    const h = document.createElement('h2');
+    h.textContent = S.icon + ' ' + S.name;
+    all.append(h);
+    const g = document.createElement('div');
+    g.className = 'mh-sheet-grid';
+    S.characters.forEach(function (c, i) {
+      const b = document.createElement('div');
+      b.className = 'mh-card bg-' + c.bg;
+      b.innerHTML = '<div class="inner"><div class="front"><div class="pic">' + MinhuFaces.face(i, set) + '</div><div class="name">' + c.name + '</div></div><div class="back">؟</div></div>';
+      g.append(b);
+    });
+    all.append(g);
   });
 </script>
 </body>

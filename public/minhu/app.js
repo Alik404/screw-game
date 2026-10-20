@@ -64,15 +64,23 @@
   }
   function reduced() { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
   function buzz(p) { if (!navigator.vibrate) return; if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return; try { navigator.vibrate(p); } catch (e) { /* ignore */ } }
-  function question(id) { return C.QUESTIONS.find(function (q) { return q.id === id; }); }
-  function matches(i, q) { return q.is.indexOf(C.CHARACTERS[i][q.attr]) >= 0; }
+  // the board in play (or chosen in the lobby): its characters and questions
+  function curSet() {
+    if (S.game && S.game.options && S.game.options.set) return S.game.options.set;
+    if (S.room && S.room.options && S.room.options.set) return S.room.options.set;
+    return 'people';
+  }
+  function CH() { return C.SETS[curSet()].characters; }
+  function QS() { return C.SETS[curSet()].questions; }
+  function question(id) { return QS().find(function (q) { return q.id === id; }); }
+  function matches(i, q) { return q.is.indexOf(CH()[i][q.attr]) >= 0; }
 
   const params = new URLSearchParams(location.search);
   let urlCode = (params.get('room') || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, SC.ROOM_CODE_LENGTH);
   const pageStart = Date.now();
   function savedOptions() {
     const o = store(GAME + '.options') || {};
-    return { target: C.TARGETS.indexOf(o.target) >= 0 ? o.target : C.DEFAULT_TARGET, level: C.LEVELS.indexOf(o.level) >= 0 ? o.level : C.DEFAULT_LEVEL };
+    return { target: C.TARGETS.indexOf(o.target) >= 0 ? o.target : C.DEFAULT_TARGET, level: C.LEVELS.indexOf(o.level) >= 0 ? o.level : C.DEFAULT_LEVEL, set: C.SET_OPTIONS.indexOf(o.set) >= 0 ? o.set : C.DEFAULT_SET };
   }
 
   const S = {
@@ -232,7 +240,7 @@
         break;
       }
       case 'guess': {
-        const c = C.CHARACTERS[e.char];
+        const c = CH()[e.char];
         announce((isMe(e.playerId) ? 'خمّنت: ' : nm(e.playerId) + ' خمّن: ') + c.name, e.right ? 'صح! 🎯' : 'غلط!', e.right ? 'yes' : 'no');
         sfx(e.right ? 'win' : 'screw');
         speak((isMe(e.playerId) ? 'خمّنت ' : nm(e.playerId) + ' خمّن ') + c.name + '. ' + (e.right ? 'صح!' : 'غلط!'));
@@ -285,11 +293,12 @@
 
   function faceCard(i, o) {
     o = o || {};
-    const c = C.CHARACTERS[i];
+    const set = o.set || curSet();
+    const c = C.SETS[set].characters[i];
     const down = o.down;
     const el = h(o.tag || 'button', { class: 'mh-card bg-' + c.bg + (down ? ' down' : '') + (o.cls ? ' ' + o.cls : ''), 'aria-label': c.name + (down ? ' (مقلوبة)' : ''), 'data-char': i },
       h('div', { class: 'inner' },
-        h('div', { class: 'front' }, h('div', { class: 'pic', html: F.face(i) }), h('div', { class: 'name' }, c.name)),
+        h('div', { class: 'front' }, h('div', { class: 'pic', html: F.face(i, set) }), h('div', { class: 'name' }, c.name)),
         h('div', { class: 'back' }, '؟')));
     if (o.onClick) el.addEventListener('click', o.onClick);
     return el;
@@ -347,6 +356,20 @@
   function reactButton(cls) { return h('button', { class: 'icon-btn mh-reactbtn' + (cls ? ' ' + cls : ''), 'aria-label': 'تفاعل', 'aria-expanded': S.reacts ? 'true' : 'false', onclick: function () { S.reacts = !S.reacts; render(); } }, icon('smile', 24)); }
   function reactRow() { return h('div', { class: 'mh-reacts', role: 'toolbar' }, SC.REACTIONS.map(function (id) { return h('button', { 'aria-label': id, onclick: function () { S.reacts = false; send({ type: 'react', id: id }); } }, EMOJI[id]); })); }
 
+  // the boards to choose from, each with three of its faces
+  const PREVIEW = { people: [13, 5, 0], animals: [0, 7, 19], monsters: [1, 10, 18], robots: [0, 8, 15] };
+  function setPicker(amHost) {
+    const cur = roomOpts().set || C.DEFAULT_SET;
+    return h('div', { class: 'mh-opt' }, h('div', { class: 'dim small' }, amHost ? 'اختار اللوحة' : 'اللوحة (يختارها المضيف)'),
+      h('div', { class: 'mh-sets' }, C.SET_OPTIONS.map(function (id) {
+        const B = C.SETS[id];
+        return h('button', { class: 'mh-setpick', 'aria-pressed': cur === id ? 'true' : 'false', disabled: !amHost, onclick: amHost ? function () { setOpt('set', id); } : null },
+          h('div', { class: 'faces' }, PREVIEW[id].map(function (k) { return faceCard(k, { tag: 'div', set: id }); })),
+          h('b', null, B.icon + ' ' + B.name),
+          h('small', null, B.characters.length + ' شخصية · ' + B.questions.length + ' سؤال · ' + B.note));
+      })));
+  }
+
   function lobbyScreen() {
     const r = S.room;
     const amHost = r.hostId === S.you;
@@ -362,6 +385,7 @@
           p.bot && amHost ? h('button', { class: 'icon-btn mh-rm', 'aria-label': 'احذف ' + p.name, onclick: function () { send({ type: 'remove_bot', id: p.id }); } }, icon('close', 20)) : null);
       })),
       amHost && r.players.length < 2 ? h('button', { class: 'with-icon', onclick: function () { send({ type: 'add_bot' }); } }, icon('bot', 20), 'العب ضد الكمبيوتر') : null,
+      setPicker(amHost),
       amHost ? h('div', { class: 'mh-opts' },
         seg('المباراة', 'target', C.TARGETS, { 1: 'جولة وحدة', 2: 'أفضل من 3', 3: 'أفضل من 5' }, { 1: 'سريعة', 2: 'تفوز بجولتين', 3: 'تفوز بثلاث' }),
         seg('الكمبيوتر', 'level', C.LEVELS, C.LEVEL_NAMES, { easy: 'يخمّن بسرعة', smart: 'يسأل أذكى سؤال' }))
@@ -446,13 +470,13 @@
         h('span', { class: 'digits', id: 'mh-timer' }, left === null || v.phase !== 'turn' ? '-:--' : h('span', { class: 'num' }, Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0')))),
       flash ? h('div', { class: 'main' }, h('div', { class: 'q' }, flash.q), h('div', { class: 'a' }, flash.a)) : h('div', { class: 'main' }, h('div', { class: 'q' }, lcdStatus(v))),
       h('div', { class: 'row' }, h('span', null, 'أنت ' + v.scores[v.you] + ' – ' + v.scores[opp] + ' ' + oppP.name), h('span', null, 'الجولة ' + v.round)));
-    const board = h('div', { class: 'mh-board' + (S.guessMode ? ' guessing' : '') }, C.CHARACTERS.map(function (c, i) {
+    const board = h('div', { class: 'mh-board' + (S.guessMode ? ' guessing' : '') }, CH().map(function (c, i) {
       const down = S.down.indexOf(i) >= 0;
       return faceCard(i, { down: down, cls: S.guessMode && !down ? 'guessable' : '', onClick: function () { toggle(i); } });
     }));
     const deck = h('div', { class: 'mh-deck' + (myTurn ? ' turn' : ''), 'data-seat': v.you },
       h('button', { class: 'mh-secret', 'aria-label': 'شخصيتك', onclick: function () { S.sheet = 'secret'; render(); } },
-        h('span', { class: 'window' }, faceCard(v.secret, { tag: 'div', cls: 'mini' })), h('span', { class: 'lbl' }, 'شخصيتك', h('b', null, C.CHARACTERS[v.secret].name))),
+        h('span', { class: 'window' }, faceCard(v.secret, { tag: 'div', cls: 'mini' })), h('span', { class: 'lbl' }, 'شخصيتك', h('b', null, CH()[v.secret].name))),
       actionPanel(v),
       reactButton());
     return h('div', { class: 'mh-app mh-elec seat-' + v.playerIds.indexOf(v.you) },
@@ -481,13 +505,13 @@
       v.currentPlayerId === opp ? h('span', { class: 'mh-turn' }, 'دوره') : null,
       h('span', { class: 'grow' }),
       h('span', { class: 'mh-left' }, 'باقي عنده ', h('b', null, N - oppP.down), ' وجه'));
-    const board = h('div', { class: 'mh-board' + (S.guessMode ? ' guessing' : '') }, C.CHARACTERS.map(function (c, i) {
+    const board = h('div', { class: 'mh-board' + (S.guessMode ? ' guessing' : '') }, CH().map(function (c, i) {
       const down = S.down.indexOf(i) >= 0;
       return faceCard(i, { down: down, cls: S.guessMode && !down ? 'guessable' : '', onClick: function () { toggle(i); } });
     }));
     const mine = h('div', { class: 'mh-me' + (myTurn ? ' turn' : ''), 'data-seat': v.you },
       h('button', { class: 'mh-secret', 'aria-label': 'شخصيتك', onclick: function () { S.sheet = 'secret'; render(); } },
-        faceCard(v.secret, { tag: 'div', cls: 'mini' }), h('span', { class: 'lbl' }, 'شخصيتك', h('b', null, C.CHARACTERS[v.secret].name))),
+        faceCard(v.secret, { tag: 'div', cls: 'mini' }), h('span', { class: 'lbl' }, 'شخصيتك', h('b', null, CH()[v.secret].name))),
       actionPanel(v),
       reactButton());
     return h('div', { class: 'mh-app' }, top, oppStrip, h('div', { class: 'mh-boardwrap' }, board), S.reacts ? h('div', { class: 'mh-reactwrap' }, reactRow()) : null, mine);
@@ -548,7 +572,7 @@
     const mine = {};
     v.asked.forEach(function (a) { if (a.by === v.you) mine[a.q] = a.yes; });
     const groups = [];
-    C.QUESTIONS.forEach(function (q) { let g = groups.find(function (x) { return x.name === q.group; }); if (!g) { g = { name: q.group, list: [] }; groups.push(g); } g.list.push(q); });
+    QS().forEach(function (q) { let g = groups.find(function (x) { return x.name === q.group; }); if (!g) { g = { name: q.group, list: [] }; groups.push(g); } g.list.push(q); });
     // how many faces still up would say yes: a hint of how useful the question is
     const up = []; for (let i = 0; i < N; i++) if (S.down.indexOf(i) < 0) up.push(i);
     return sheet('اختار سؤالك', h('div', { class: 'mh-asklist' }, groups.map(function (g) {
@@ -568,7 +592,7 @@
     const i = S.guessPick;
     return sheet('متأكد؟', h('div', { class: 'menu-list mh-guess' },
       faceCard(i, { tag: 'div', cls: 'big' }),
-      h('p', { class: 'center' }, 'تخمّن إن شخصية خصمك هي ', h('b', null, C.CHARACTERS[i].name), '؟ إذا طلع غلط تخسر الجولة.'),
+      h('p', { class: 'center' }, 'تخمّن إن شخصية خصمك هي ', h('b', null, CH()[i].name), '؟ إذا طلع غلط تخسر الجولة.'),
       h('div', { class: 'btns' },
         h('button', { class: 'primary big', onclick: function () { S.sheet = null; S.guessMode = false; if (send({ type: 'guess', char: i })) S.sent = true; } }, 'إي، هذا هو!'),
         h('button', { onclick: function () { S.sheet = null; render(); } }, 'رجوع'))), closeSheet);
@@ -576,7 +600,7 @@
 
   function secretSheet() {
     const v = S.game;
-    const c = C.CHARACTERS[v.secret];
+    const c = CH()[v.secret];
     return sheet('شخصيتك السرية', h('div', { class: 'menu-list mh-guess' }, faceCard(v.secret, { tag: 'div', cls: 'big' }),
       h('p', { class: 'center dim' }, 'خصمك يحاول يعرف إنها ', h('b', null, c.name), '. الخادم يجاوب أسئلته عنها بالصدق.')), closeSheet);
   }

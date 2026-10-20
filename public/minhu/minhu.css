@@ -302,3 +302,74 @@ body:has(.mh-app), body:has(.mh-shell) {
 .mh-elec .mh-panel .btns > button.arc-cancel { --arc: var(--mh-arc-k); }
 .mh-elec + .mh-showres, .mh-elec .mh-reactwrap { bottom: 150px; }
 @media (prefers-reduced-motion: reduce) { .mh-led i.g.on, .mh-lcd .main .a { animation: none; } }
+
+/* ---------- the other boards: animals (emoji), monsters, robots ---------- */
+.mh-emoji { width: 100%; height: 100%; display: grid; place-items: center; font-size: clamp(26px, 9vw, 64px); line-height: 1; font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", var(--font); filter: drop-shadow(0 4px 4px color-mix(in srgb, var(--ink) 25%, transparent)); }
+.mh-card.mini .mh-emoji { font-size: 34px; }
+.mh-card.big .mh-emoji { font-size: 84px; }
+.mh-hero-cards .mh-emoji, .pt-mh .mh-emoji { font-size: 52px; }
+.mh-board .mh-emoji { font-size: min(9vw, 9dvh, 64px); }
+
+.mh-face.mc-green { --mon: var(--mh-mon-green); } .mh-face.mc-purple { --mon: var(--mh-mon-purple); } .mh-face.mc-orange { --mon: var(--mh-mon-orange); }
+.mh-face.mc-blue { --mon: var(--mh-mon-blue); } .mh-face.mc-pink { --mon: var(--mh-mon-pink); } .mh-face.mc-yellow { --mon: var(--mh-mon-yellow); }
+.mh-face.mon .gsh { fill: color-mix(in srgb, var(--ink) 18%, transparent); }
+.mh-face.mon .body { fill: var(--mon); }
+.mh-face.mon .body2 { fill: color-mix(in srgb, var(--ink) 18%, var(--mon)); }
+.mh-face.mon .belly { fill: color-mix(in srgb, var(--paper) 45%, var(--mon)); }
+.mh-face.mon .spot { fill: color-mix(in srgb, var(--ink) 22%, var(--mon)); }
+.mh-face.mon .tuft { fill: color-mix(in srgb, var(--ink) 32%, var(--mon)); }
+.mh-face.mon .horn { fill: var(--mh-mon-horn); stroke: color-mix(in srgb, var(--ink) 25%, var(--mh-mon-horn)); stroke-width: 1.2; }
+.mh-face.mon .stem { fill: none; stroke: color-mix(in srgb, var(--ink) 25%, var(--mon)); stroke-width: 2.6; stroke-linecap: round; }
+.mh-face.mon .bulb { fill: color-mix(in srgb, var(--paper) 35%, var(--mon)); stroke: color-mix(in srgb, var(--ink) 25%, var(--mon)); stroke-width: 1.4; }
+.mh-face.mon .ew { fill: var(--paper); stroke: color-mix(in srgb, var(--ink) 30%, var(--mon)); stroke-width: 1.4; }
+.mh-face.mon .ep { fill: var(--mh-eye); }
+.mh-face.mon .eh { fill: var(--paper); }
+.mh-face.mon .brow { stroke: var(--mh-eye); stroke-width: 2.6; stroke-linecap: round; }
+.mh-face.mon .mopen { fill: var(--mh-mon-mouth); }
+.mh-face.mon .mline { fill: none; stroke: var(--mh-mon-mouth); stroke-width: 2.6; stroke-linecap: round; }
+.mh-face.mon .tongue { fill: var(--mh-mon-tongue); }
+.mh-face.mon .fang { fill: var(--paper); stroke: color-mix(in srgb, var(--ink) 20%, transparent); stroke-width: .6; }
+
+.mh-face.rc-silver { --rob: var(--mh-rob-silver); } .mh-face.rc-red { --rob: var(--mh-rob-red); } .mh-face.rc-blue { --rob: var(--mh-rob-blue); } .mh-face.rc-gold { --rob: var(--mh-rob-gold); }
+.mh-face.rob .metal { fill: var(--rob); stroke: color-mix(in srgb, var(--ink) 35%, var(--rob)); stroke-width: 1.6; }
+.mh-face.rob .panel { fill: color-mix(in srgb, var(--ink) 55%, var(--rob)); }
+.mh-face.rob .led1 { fill: var(--mh-rob-glow); } .mh-face.rob .led2 { fill: var(--mh-led-r); } .mh-face.rob .led3 { fill: var(--mh-led-g); }
+.mh-face.rob .joint { fill: color-mix(in srgb, var(--ink) 30%, var(--rob)); }
+.mh-face.rob .ridge, .mh-face.rob .wire { fill: none; stroke: color-mix(in srgb, var(--ink) 50%, var(--rob)); stroke-width: 2; stroke-linecap: round; }
+.mh-face.rob .band { fill: none; stroke: color-mix(in srgb, var(--ink) 60%, var(--rob)); stroke-width: 3.4; }
+.mh-face.rob .phone { fill: color-mix(in srgb, var(--ink) 60%, var(--rob)); }
+.mh-face.rob .tip { fill: var(--mh-led-r); stroke: color-mix(in srgb, var(--ink) 30%, var(--mh-led-r)); stroke-width: 1; }
+.mh-face.rob .siren { fill: var(--mh-led-r); }
+.mh-face.rob .rays { fill: none; stroke: var(--mh-led-r); stroke-width: 2; stroke-linecap: round; }
+.mh-face.rob .blade { fill: color-mix(in srgb, var(--paper) 30%, var(--mh-rob-blue)); stroke: color-mix(in srgb, var(--ink) 30%, var(--mh-rob-blue)); stroke-width: 1; }
+.mh-face.rob .hub { fill: color-mix(in srgb, var(--ink) 50%, var(--rob)); }
+.mh-face.rob .shine { fill: var(--paper); opacity: .35; }
+.mh-face.rob .bolt { fill: color-mix(in srgb, var(--ink) 40%, var(--rob)); }
+.mh-face.rob .eyering { fill: var(--mh-bezel); }
+.mh-face.rob .glow, .mh-face.rob .scan { fill: var(--mh-rob-glow); stroke: var(--mh-rob-glow); }
+.mh-face.rob .glow { stroke: none; }
+.mh-face.rob .scan { stroke-width: 3; stroke-linecap: round; opacity: .9; }
+.mh-face.rob .eh { fill: var(--paper); }
+.mh-face.rob .visor { fill: var(--mh-bezel); }
+.mh-face.rob .screen { fill: var(--mh-bezel); stroke: color-mix(in srgb, var(--ink) 40%, var(--rob)); stroke-width: 2; }
+.mh-face.rob .pix { fill: var(--mh-rob-glow); }
+.mh-face.rob .grill { fill: color-mix(in srgb, var(--ink) 60%, var(--rob)); }
+.mh-face.rob .grill-l { stroke: color-mix(in srgb, var(--paper) 40%, var(--rob)); stroke-width: 1.4; }
+.mh-face.rob .smile { fill: none; stroke: var(--mh-rob-glow); stroke-width: 3; stroke-linecap: round; }
+.mh-face.rob .cheek { fill: var(--mh-mon-pink); opacity: .85; }
+.mh-face.rob .patch { fill: var(--mh-rob-patch); }
+.mh-face.rob .patch-c { fill: color-mix(in srgb, var(--paper) 40%, var(--mh-rob-patch)); }
+
+/* the set picker in the lobby */
+.mh-sets { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); }
+.mh-setpick { display: flex; flex-direction: column; align-items: center; gap: var(--s1); padding: var(--s2); min-height: 0; border-radius: var(--r-btn); border-color: var(--table-glow); background: var(--table); }
+.mh-setpick .faces { display: flex; justify-content: center; gap: 4px; width: 100%; }
+.mh-setpick .faces .mh-card { width: 30%; max-width: 64px; cursor: inherit; }
+.mh-setpick .faces .mh-card .name { display: none; }
+.mh-setpick .faces .mh-emoji { font-size: 30px; }
+.mh-setpick b { font-size: var(--fs-2); }
+.mh-setpick small { font-size: 11px; color: var(--text-dim); }
+.mh-setpick[aria-pressed="true"] { border-color: var(--brass); background: color-mix(in srgb, var(--brass) 16%, var(--table)); box-shadow: 0 0 0 2px var(--brass); }
+.mh-setpick[aria-pressed="true"] b { color: var(--brass); }
+.mh-setpick:disabled { opacity: 1; cursor: default; }
+.mh-review h2 { color: var(--brass); text-align: center; margin: var(--s6) 0 0; }

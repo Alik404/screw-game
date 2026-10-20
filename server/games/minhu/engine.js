@@ -16,7 +16,7 @@
     badChar: 'شخصية غير معروفة.',
     badOptions: 'خيارات اللعبة غير صالحة.',
   };
-  const N = CONFIG.CHARACTERS.length;
+  const N = CONFIG.CHARACTERS.length; // every set has the same number of characters (a test checks it)
 
   function clone(x) { return JSON.parse(JSON.stringify(x)); }
   function randOf(s) {
@@ -34,8 +34,10 @@
     return Math.floor(Math.random() * 4294967296);
   }
 
-  function question(id) { return CONFIG.QUESTIONS.find(function (q) { return q.id === id; }); }
-  function matches(ci, q) { return q.is.indexOf(CONFIG.CHARACTERS[ci][q.attr]) >= 0; }
+  // the board chosen in the lobby: its characters and its questions
+  function deck(set) { return CONFIG.SETS[set || CONFIG.DEFAULT_SET]; }
+  function question(id, set) { return deck(set).questions.find(function (q) { return q.id === id; }); }
+  function matches(ci, q, set) { return q.is.indexOf(deck(set).characters[ci][q.attr]) >= 0; }
   function curId(s) { return s.playerIds[s.current]; }
   function other(s, pid) { return s.playerIds[0] === pid ? s.playerIds[1] : s.playerIds[0]; }
 
@@ -44,7 +46,7 @@
     const mine = s.asked.filter(function (a) { return a.by === pid; });
     const out = [];
     for (let i = 0; i < N; i++) {
-      if (mine.every(function (a) { return matches(i, question(a.q)) === a.yes; })) out.push(i);
+      if (mine.every(function (a) { return matches(i, question(a.q, s.options.set), s.options.set) === a.yes; })) out.push(i);
     }
     return out;
   }
@@ -54,7 +56,9 @@
     const out = {
       target: o.target === undefined ? CONFIG.DEFAULT_TARGET : o.target,
       level: o.level === undefined ? CONFIG.DEFAULT_LEVEL : o.level,
+      set: o.set === undefined ? CONFIG.DEFAULT_SET : o.set,
     };
+    if (CONFIG.SET_OPTIONS.indexOf(out.set) < 0) return null;
     if (CONFIG.TARGETS.indexOf(out.target) < 0 || CONFIG.LEVELS.indexOf(out.level) < 0) return null;
     return out;
   }
@@ -149,10 +153,10 @@
     const s = ctx.s;
     const err = needTurn(s, pid, 'ask');
     if (err) return err;
-    const q = question(a.q);
+    const q = question(a.q, s.options.set);
     if (!q) return ERR.badQuestion;
     if (s.asked.some(function (x) { return x.by === pid && x.q === q.id; })) return ERR.asked;
-    const yes = matches(s.secrets[other(s, pid)], q);
+    const yes = matches(s.secrets[other(s, pid)], q, s.options.set);
     s.asked.push({ by: pid, q: q.id, yes: yes });
     s.stage = 'flip';
     s.seq += 1;
@@ -219,9 +223,9 @@
 
   // the question that splits the remaining faces most evenly (smart), or any useful one (easy)
   function pickQuestion(s, pid, cands, smart, r) {
-    const useful = CONFIG.QUESTIONS.filter(function (q) {
+    const useful = deck(s.options.set).questions.filter(function (q) {
       if (s.asked.some(function (a) { return a.by === pid && a.q === q.id; })) return false;
-      const yes = cands.filter(function (c) { return matches(c, q); }).length;
+      const yes = cands.filter(function (c) { return matches(c, q, s.options.set); }).length;
       return yes > 0 && yes < cands.length;
     });
     if (!useful.length) return null;
@@ -229,7 +233,7 @@
     let best = [];
     let bestScore = Infinity;
     useful.forEach(function (q) {
-      const yes = cands.filter(function (c) { return matches(c, q); }).length;
+      const yes = cands.filter(function (c) { return matches(c, q, s.options.set); }).length;
       const score = Math.max(yes, cands.length - yes);
       if (score < bestScore) { bestScore = score; best = [q]; } else if (score === bestScore) best.push(q);
     });
