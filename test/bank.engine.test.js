@@ -474,19 +474,44 @@ test('debt: raise money by mortgaging, then pay and continue the turn', () => {
   assert.equal(s.players.b.cash, CONFIG.START_CASH + owed);
 });
 
-test('bankruptcy to a player: cash, properties (still mortgaged) and jail cards go to the creditor', () => {
+test('bankruptcy to a player: every property is sold to the bank at its price and the creditor gets the money', () => {
   let s = setup(rentDebt().state, (x) => { x.props[39].mortgaged = true; });
+  const SQ = B.SQUARES;
+  const expect = 100 + SQ[5].price + (SQ[39].price - SQ[39].mortgage);
   const r = ok(s, 'a', { type: 'declare_bankruptcy' });
   const t = r.state;
   assert.equal(t.players.a.bankrupt, true);
-  assert.equal(t.props[5].owner, 'b');
-  assert.equal(t.props[39].owner, 'b');
-  assert.equal(t.props[39].mortgaged, true);
+  // the properties go back to the market, not to the creditor
+  assert.equal(t.props[5].owner, null);
+  assert.equal(t.props[39].owner, null);
+  assert.equal(t.props[39].mortgaged, false);
+  // the creditor gets the whole sale: cash + full prices (the mortgaged one less its loan), whatever the debt
+  assert.equal(t.players.b.cash, CONFIG.START_CASH + expect);
+  const ev = r.events.find((e) => e.type === 'bankrupt');
+  assert.equal(ev.to, 'b');
+  assert.equal(ev.paid, expect);
+  assert.deepEqual(ev.sold.map((x) => [x.square, x.price]), [[5, SQ[5].price], [39, SQ[39].price - SQ[39].mortgage]]);
   assert.deepEqual(t.players.b.jailCards, ['k5']);
-  assert.equal(t.players.b.cash, CONFIG.START_CASH + 100);
   assert.equal(t.phase, 'gameOver'); // only b left
   assert.deepEqual(t.winnerIds, ['b']);
   assert.ok(E.act(t, 'b', { type: 'roll' }).error);
+});
+
+test('bankruptcy to a player: buildings are sold back first, and the creditor gets everything raised', () => {
+  let s = own(game(3), 'a', B.groupSquares(1), { houses: 2 });
+  s = setup(s, (x) => { x.players.a.cash = 0; x.players.a.pos = 1; x.bankHouses -= 4; });
+  s = own(s, 'b', B.groupSquares(8), { houses: 5 });
+  s = setup(s, (x) => { x.players.a.pos = 35; x.bankHotels -= 2; });
+  const r = rollWith(s, 'a', 2, 2); // square 39 with a hotel
+  assert.equal(r.state.stage, 'debt');
+  const SQ = B.SQUARES;
+  const houses = B.groupSquares(1).reduce((n, i) => n + Math.floor(2 * SQ[i].houseCost * CONFIG.HOUSE_SELL_RATE), 0);
+  const lands = B.groupSquares(1).reduce((n, i) => n + SQ[i].price, 0);
+  const before = r.state.players.b.cash;
+  const t = ok(r.state, 'a', { type: 'declare_bankruptcy' }).state;
+  assert.equal(t.players.b.cash, before + houses + lands);
+  B.groupSquares(1).forEach((i) => { assert.equal(t.props[i].owner, null); assert.equal(t.props[i].houses, 0); });
+  assert.equal(t.bankHouses, CONFIG.BANK_HOUSES);
 });
 
 test('bankruptcy to the bank: buildings sold, properties return free, play goes on', () => {

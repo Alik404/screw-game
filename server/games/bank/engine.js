@@ -322,27 +322,34 @@
 
   // ---------- bankruptcy ----------
 
+  // Going bankrupt: buildings go back to the bank at the sell price, and every property is sold back to the
+  // bank at its price (a mortgaged one at its price less the loan). Nothing changes hands: the properties
+  // return to the market, and a creditor gets the money (all of it, even when it does not cover the debt).
   function goBankrupt(ctx, pid, creditor) {
     const s = ctx.s;
     const p = s.players[pid];
     if (creditor && s.players[creditor].bankrupt) creditor = null;
-    // buildings go back to the bank at the sell price first
+    const sold = [];
+    let raised = 0;
     ownedBy(s, pid).forEach(function (i) {
       const pr = s.props[i];
       if (!pr.houses) return;
       if (pr.houses === CONFIG.HOUSES_BEFORE_HOTEL + 1) s.bankHotels += 1; else s.bankHouses += pr.houses;
-      p.cash += Math.floor(pr.houses * SQ[i].houseCost * CONFIG.HOUSE_SELL_RATE);
+      const back = Math.floor(pr.houses * SQ[i].houseCost * CONFIG.HOUSE_SELL_RATE);
+      p.cash += back;
+      raised += back;
       pr.houses = 0;
     });
     ownedBy(s, pid).forEach(function (i) {
       const pr = s.props[i];
-      if (creditor) {
-        pr.owner = creditor; // stays mortgaged if it was
-      } else {
-        pr.owner = null;
-        pr.mortgaged = false;
-      }
+      const price = SQ[i].price - (pr.mortgaged ? SQ[i].mortgage : 0);
+      p.cash += price;
+      raised += price;
+      sold.push({ square: i, price: price, mortgaged: pr.mortgaged });
+      pr.owner = null;
+      pr.mortgaged = false;
     });
+    const paid = creditor ? p.cash : 0;
     if (creditor) {
       s.players[creditor].cash += p.cash;
       s.players[creditor].jailCards = s.players[creditor].jailCards.concat(p.jailCards);
@@ -360,7 +367,7 @@
       s.trade = null;
       ctx.events.push({ type: 'trade_cancelled', reason: 'bankrupt' });
     }
-    ctx.events.push({ type: 'bankrupt', playerId: pid, to: creditor });
+    ctx.events.push({ type: 'bankrupt', playerId: pid, to: creditor, sold: sold, raised: raised, paid: paid });
     checkGameOver(ctx);
   }
 

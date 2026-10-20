@@ -3,8 +3,8 @@
 //   Bank3D.element()           the persistent host element (canvas + overlay), reused on every render
 //   Bank3D.update(view, opts)  sync the scene with an engine view (names, tokens, focus, onCell...)
 //   Bank3D.roll([a, b])        tumble the dice and land on the server's numbers
-// The camera follows the player whose turn it is, close enough to read the squares;
-// a button, the mouse wheel or a pinch shows the whole board, and a swipe looks along it.
+// The board stays still: the camera shows the whole board from the front and never moves.
+// (The follow camera, swipes and zoom below are kept but switched off by FIXED.)
 import * as THREE from '/vendor/three.module.min.js';
 
 const gsap = window.gsap;
@@ -859,7 +859,8 @@ function saveZoom() {
     try { localStorage.setItem(ZOOM_KEY, String(Math.round(cam.zoom * 100) / 100)); } catch (e) { /* no storage: the choice lasts this visit */ }
   }, 300);
 }
-const cam = { s: 0, zoom: loadZoom(), follow: true, curId: null, curPos: 0 };
+const FIXED = true; // the board never moves: the whole board, seen from the front
+const cam = { s: 0, zoom: FIXED ? 1 : loadZoom(), follow: !FIXED, curId: null, curPos: 0 };
 let Df = 10; // camera distance of the close view, set from the canvas size
 
 const smooth = (x) => { const t = Math.min(1, Math.max(0, x)); return t * t * (3 - 2 * t); };
@@ -963,6 +964,13 @@ function turnDecor(th) {
 
 function applyCamera() {
   if (!supported) return;
+  if (FIXED) {
+    turnDecor(0);
+    const o = overviewPose(0);
+    setPose(o.L, o.D, o.phi, 0);
+    dirty = true;
+    return;
+  }
   const z = cam.zoom;
   const th = azimuth(cam.s);
   turnDecor(th);
@@ -1054,7 +1062,7 @@ ctrl.append(zoomBtn, centreBtn);
 const info = document.createElement('div');
 info.className = 'bk-3d-info';
 overlay.append(info);
-if (supported) host.append(ctrl);
+if (supported && !FIXED) host.append(ctrl);
 function refreshCtrl(goal) {
   const z = goal === undefined ? cam.zoom : goal;
   if (z < 0.5) setIcon(zoomBtn, 'whole', ICONS.whole, 'اللوحة كاملة');
@@ -1099,6 +1107,7 @@ if (supported) {
     if (!p || !gesture) return;
     p.x = e.clientX;
     p.y = e.clientY;
+    if (FIXED) return; // a still board: only taps
     if (gesture.kind === 'pinch') {
       if (pointers.size >= 2) setZoom(gesture.z0 + Math.log(gesture.d0 / spread()) * 1.2);
       return;
@@ -1134,7 +1143,7 @@ if (supported) {
   };
   el.addEventListener('pointerup', end);
   el.addEventListener('pointercancel', end);
-  el.addEventListener('wheel', (e) => {
+  if (!FIXED) el.addEventListener('wheel', (e) => {
     e.preventDefault();
     setZoom(cam.zoom + Math.max(-0.25, Math.min(0.25, e.deltaY * 0.0015)));
     saveZoom();
@@ -1170,7 +1179,8 @@ function update(view, opts) {
   syncPieces(view, tokens);
   // the camera follows the player whose turn it is (and comes back to them whenever they move)
   const cur = view.currentPlayerId;
-  if (cur && view.players[cur]) {
+  if (cur && view.players[cur] && FIXED && cam.curId === null) { cam.curId = cur; applyCamera(); }
+  if (cur && view.players[cur] && !FIXED) {
     const pos = view.players[cur].pos;
     if (cam.curId === null) {
       cam.curId = cur;
