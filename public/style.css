@@ -325,3 +325,8 @@ body.help-open .help-backdrop { opacity: 1; pointer-events: auto; }
 .plist .tag + .lob-rm { margin-inline-start: var(--s1); }
 /* the reaction button keeps its icon size in every top bar */
 button.icon-btn.rx-btn svg { width: 22px; height: 22px; flex: none; }
+/* ---------- end / leave the room (roomend.js), on every game page ---------- */
+.screen > .re-btn { align-self: center; padding-inline: var(--s6); }
+.re-wrap { position: fixed; z-index: 95; justify-content: center; }
+.re-wrap .sheet { max-width: 560px; }
+.re-q { margin: 0; line-height: 1.7; }

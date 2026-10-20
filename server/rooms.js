@@ -31,12 +31,24 @@ const MSG = {
   noVoice: 'المكالمة غير متاحة في هذه اللعبة.',
 };
 
+// what everyone (and anyone who comes back later) is told when the host ends the room
+function closedText(name) {
+  return 'أنهى ' + name + ' (المضيف) الغرفة. أنشئ غرفة جديدة متى أردت اللعب مرة أخرى.';
+}
+
 function createRooms(opts) {
   opts = opts || {};
   const setTimer = opts.setTimer || setTimeout;
   const clearTimer = opts.clearTimer || clearTimeout;
   const now = opts.now || Date.now;
   const rooms = new Map();
+  // rooms the host ended, remembered for a while: a player who was away is told why the code stopped working
+  const closedRooms = new Map(); // code -> {at, text}
+
+  function forgetOldClosed() {
+    const t = now();
+    closedRooms.forEach(function (c, code) { if (t - c.at > CONFIG.ROOM_IDLE_MINUTES * 60 * 1000) closedRooms.delete(code); });
+  }
 
   // ---------- helpers ----------
 
@@ -56,7 +68,7 @@ function createRooms(opts) {
     for (;;) {
       let code = '';
       for (let i = 0; i < CONFIG.ROOM_CODE_LENGTH; i++) code += abc[crypto.randomInt(abc.length)];
-      if (!rooms.has(code)) return code;
+      if (!rooms.has(code) && !closedRooms.has(code)) return code;
     }
   }
 
@@ -256,6 +268,7 @@ function createRooms(opts) {
     const game = m.game === undefined ? 'screw' : m.game;
     if (typeof game !== 'string' || !Object.prototype.hasOwnProperty.call(GAMES, game)) return err(conn, MSG.unknownGame);
     if (rooms.size >= CONFIG.MAX_ROOMS) return err(conn, MSG.serverFull, 'SERVER_FULL');
+    forgetOldClosed();
     const room = {
       code: newCode(), game: game, hostSeat: null, players: [], seq: 0, engine: null,
       timers: {}, timerOrder: [], idle: null,
@@ -271,7 +284,11 @@ function createRooms(opts) {
     if (conn.room) return err(conn, MSG.alreadyIn);
     const code = typeof m.code === 'string' ? m.code.trim().toUpperCase() : '';
     const room = rooms.get(code);
-    if (!room) return err(conn, MSG.noRoom, 'NO_ROOM');
+    if (!room) {
+      forgetOldClosed();
+      const c = closedRooms.get(code);
+      return c ? err(conn, c.text, 'ROOM_CLOSED') : err(conn, MSG.noRoom, 'NO_ROOM');
+    }
 
     // Reconnection: the secret playerId identifies a returning player.
     if (typeof m.playerId === 'string') {
@@ -429,6 +446,42 @@ function createRooms(opts) {
   handlers.next_round = hostAction('next_round');
   handlers.new_game = hostAction('new_game');
   handlers.end_game = hostAction('end_game');
+
+  // the host ends the room for everyone (lobby or game): all go back to the home screen and the code stops working
+  handlers.close_room = function (conn) {
+    const room = conn.room;
+    if (!room) return err(conn, MSG.notIn);
+    const me = byConn(room, conn);
+    if (me.seat !== room.hostSeat) return err(conn, MSG.hostOnly);
+    const text = closedText(me.name);
+    broadcast(room, { type: 'room_closed', by: me.seat, name: me.name, text: text });
+    room.players.forEach(function (p) {
+      if (p.conn) { p.conn.room = null; p.conn = null; } // their sockets stay open for a new room
+    });
+    forgetOldClosed();
+    closedRooms.set(room.code, { at: now(), text: text });
+    destroy(room);
+  };
+
+  // anyone leaves for good: in the lobby the seat is freed at once; in a game the seat stays and is played for them
+  handlers.leave_room = function (conn) {
+    const room = conn.room;
+    if (!room) return err(conn, MSG.notIn);
+    const me = byConn(room, conn);
+    conn.room = null;
+    me.conn = null;
+    if (me.graceTimer) { clearTimer(me.graceTimer); me.graceTimer = null; }
+    sendTo(conn, { type: 'left_room' });
+    if (!started(room)) room.players = room.players.filter(function (p) { return p !== me; });
+    migrateHost(room);
+    broadcast(room, { type: 'player_left', id: me.seat, name: me.name });
+    touchIdle(room);
+    broadcastRoom(room);
+    if (started(room)) {
+      scheduleTimer(room); // their turns now come on the short "away" clock
+      broadcastGame(room);
+    }
+  };
 
   // in-game actions: every game's action names are routed here, then checked against the room's game
   const allActions = {};

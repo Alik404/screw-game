@@ -164,10 +164,25 @@
         break;
       case 'event': onEvent(m.event); break;
       case 'reaction': showReaction(m.from, m.id); return;
+      case 'room_closed': {
+        const mine = m.by === S.you;
+        window.RoomEnd.dismiss();
+        leaveRoom();
+        if (mine) toast('أنهيت الغرفة.', true); else S.lost = { text: m.text };
+        break;
+      }
+      case 'left_room':
+        window.RoomEnd.dismiss();
+        leaveRoom();
+        toast('خرجت من الغرفة.', true);
+        break;
+      case 'player_left':
+        toast(m.name + ' خرج من الغرفة.');
+        break;
       case 'error':
         if (S.autoJoining) {
           S.autoJoining = false; leaveRoom();
-          if (m.code === 'NO_ROOM') S.lost = { restarted: S.serverRestarted }; else { S.homeError = m.message; toast(m.message); }
+          if (m.code === 'NO_ROOM' || m.code === 'ROOM_CLOSED') S.lost = { restarted: S.serverRestarted, text: m.code === 'ROOM_CLOSED' ? m.message : '' }; else { S.homeError = m.message; toast(m.message); }
         } else if (/انتظر الكرت|مجمّد/.test(m.message)) {
           // a race lost by a hair, or a tap while frozen: nothing to tell
         } else { if (!S.you) S.homeError = m.message; toast(m.message); }
@@ -282,7 +297,7 @@
       sendRaw({ type: 'join_room', code: S.codeInput, name: S.name, playerId: S.session && S.session.code === S.codeInput ? S.session.playerId : undefined });
     };
     const lost = S.lost ? h('div', { class: 'lost', role: 'alert' }, h('h2', null, 'انتهت الغرفة'),
-      h('p', null, S.lost.restarted ? 'أُعيد تشغيل الخادم فضاعت الغرف المفتوحة. أنشئ غرفة جديدة.' : 'هذه الغرفة لم تعد موجودة: تُحذف بعد ' + SC.ROOM_IDLE_MINUTES + ' دقيقة بلا لاعبين.'),
+      h('p', null, S.lost.text ? S.lost.text : S.lost.restarted ? 'أُعيد تشغيل الخادم فضاعت الغرف المفتوحة. أنشئ غرفة جديدة.' : 'هذه الغرفة لم تعد موجودة: تُحذف بعد ' + SC.ROOM_IDLE_MINUTES + ' دقيقة بلا لاعبين.'),
       h('button', { class: 'primary', onclick: function () { S.lost = null; create(); }, disabled: offline }, 'إنشاء غرفة جديدة'),
       h('button', { onclick: function () { S.lost = null; render(); } }, 'إغلاق')) : null;
     return h('div', { class: 'screen lg-home' },
@@ -347,6 +362,7 @@
       amHost ? [present < 2 ? h('div', { class: 'center dim' }, 'أرسل الرابط أو أضف لاعب كمبيوتر.') : null,
         h('button', { class: 'primary big', disabled: present < 2, onclick: function () { send(r.options ? { type: 'start_game' } : { type: 'start_game', options: S.opts }); } }, 'ابدأ')]
         : h('div', { class: 'center dim' }, 'بانتظار المضيف…'),
+      window.RoomEnd.button(),
       h('a', { class: 'all-games', href: '/' }, 'كل الألعاب'));
   }
 
@@ -416,6 +432,7 @@
       })),
       h('div', { class: 'grow' }),
       amHost ? h('button', { class: 'primary big', onclick: function () { send({ type: 'new_game' }); } }, 'لعبة جديدة') : h('div', { class: 'center dim' }, 'بانتظار المضيف…'),
+      window.RoomEnd.button(),
       h('a', { class: 'all-games', href: '/' }, 'كل الألعاب'));
   }
 
@@ -432,6 +449,7 @@
       h('button', { class: 'with-icon', onclick: function () { S.sheet = 'help'; render(); } }, icon('help', 20), 'طريقة اللعب'),
       h('button', { class: 'with-icon', onclick: function () { SND.setMuted(!muted); render(); } }, icon(muted ? 'mute' : 'sound', 20), muted ? 'الصوت مكتوم - اضغط للتشغيل' : 'الصوت يعمل - اضغط للكتم'),
       amHost && S.game.phase !== 'gameOver' ? h('button', { class: 'with-icon danger', onclick: function () { S.sheet = null; send({ type: 'end_game' }); } }, icon('flag', 20), 'إنهاء اللعبة الآن') : null,
+      window.RoomEnd.button(),
       h('a', { class: 'lg-link', href: '/' }, 'كل الألعاب'),
       h('div', { class: 'dim small center' }, 'الغرفة ' + (S.room ? S.room.code : ''))), closeSheet);
   }
@@ -487,6 +505,11 @@
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && (!ws || ws.readyState > 1)) connect(); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && (S.sheet || S.reacts)) { S.reacts = false; closeSheet(); } });
 
+  window.RoomEnd.init({
+    send: send,
+    isHost: function () { return !!S.room && S.room.hostId === S.you; },
+    stage: function () { return !S.game ? 'lobby' : S.game.phase === 'gameOver' || S.game.phase === 'matchOver' ? 'over' : 'playing'; },
+  });
   render();
   connect();
 })();

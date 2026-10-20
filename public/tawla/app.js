@@ -204,12 +204,27 @@
       case 'reaction':
         showReaction(m.from, m.id);
         return;
+      case 'room_closed': {
+        const mine = m.by === S.you;
+        window.RoomEnd.dismiss();
+        leaveRoom();
+        if (mine) toast('أنهيت الغرفة.', true); else S.lost = { text: m.text };
+        break;
+      }
+      case 'left_room':
+        window.RoomEnd.dismiss();
+        leaveRoom();
+        toast('خرجت من الغرفة.', true);
+        break;
+      case 'player_left':
+        toast(m.name + ' خرج من الغرفة.');
+        break;
       case 'error':
         S.sent = false;
         if (S.autoJoining) {
           S.autoJoining = false;
           leaveRoom();
-          if (m.code === 'NO_ROOM') S.lost = { restarted: S.serverRestarted };
+          if (m.code === 'NO_ROOM' || m.code === 'ROOM_CLOSED') S.lost = { restarted: S.serverRestarted, text: m.code === 'ROOM_CLOSED' ? m.message : '' };
           else { S.homeError = m.message; toast(m.message); }
         } else {
           if (!S.you) S.homeError = m.message;
@@ -492,7 +507,7 @@
     };
     const lost = S.lost ? h('div', { class: 'lost', role: 'alert' },
       h('h2', null, 'انتهت الغرفة'),
-      h('p', null, S.lost.restarted
+      h('p', null, S.lost.text ? S.lost.text : S.lost.restarted
         ? 'أُعيد تشغيل الخادم (ربما نام بعد فترة بلا لعب)، فضاعت كل الغرف المفتوحة. أنشئ غرفة جديدة وأرسل الرابط لصديقك.'
         : 'هذه الغرفة لم تعد موجودة: تُحذف بعد ' + SC.ROOM_IDLE_MINUTES + ' دقيقة بلا لاعبين، أو عند إعادة تشغيل الخادم.'),
       h('button', { class: 'primary', onclick: function () { S.lost = null; create(); }, disabled: offline }, 'إنشاء غرفة جديدة'),
@@ -592,6 +607,7 @@
         ? [present < 2 ? h('div', { class: 'center dim' }, 'أرسل الرابط لصديقك أو العب ضد الكمبيوتر.') : null,
           h('button', { class: 'primary big', disabled: present < 2, onclick: function () { send(r.options ? { type: 'start_game' } : { type: 'start_game', options: S.opts }); } }, 'ابدأ')]
         : h('div', { class: 'center dim' }, 'بانتظار المضيف ليبدأ…'),
+      window.RoomEnd.button(),
       h('a', { class: 'all-games', href: '/' }, 'كل الألعاب'));
   }
 
@@ -701,6 +717,7 @@
       h('div', { class: 'grow' }),
       amHost ? h('button', { class: 'primary big', onclick: function () { send({ type: 'new_game' }); } }, 'مباراة جديدة')
         : h('div', { class: 'center dim' }, 'بانتظار المضيف لبدء مباراة جديدة…'),
+      window.RoomEnd.button(),
       h('a', { class: 'all-games', href: '/' }, 'كل الألعاب'));
   }
 
@@ -734,6 +751,7 @@
       h('button', { class: 'with-icon', onclick: function () { S.sheet = 'help'; render(); } }, icon('help', 20), 'طريقة اللعب'),
       h('button', { class: 'with-icon', onclick: function () { SND.setMuted(!muted); render(); } }, icon(muted ? 'mute' : 'sound', 20), muted ? 'الصوت مكتوم - اضغط للتشغيل' : 'الصوت يعمل - اضغط للكتم'),
       amHost && v.phase !== 'matchOver' ? h('button', { class: 'with-icon danger', onclick: function () { S.sheet = 'end'; render(); } }, icon('flag', 20), 'إنهاء المباراة الآن') : null,
+      window.RoomEnd.button(),
       h('a', { class: 'tw-link', href: '/' }, 'كل الألعاب'),
       h('div', { class: 'dim small center' }, 'الغرفة ' + (S.room ? S.room.code : ''))), closeSheet);
   }
@@ -836,6 +854,11 @@
     if ((e.key === 'z' || e.key === 'Backspace') && (v.stage === 'move' || v.stage === 'confirm') && v.stepsDone) { e.preventDefault(); undo(); }
   });
 
+  window.RoomEnd.init({
+    send: send,
+    isHost: function () { return !!S.room && S.room.hostId === S.you; },
+    stage: function () { return !S.game ? 'lobby' : S.game.phase === 'gameOver' || S.game.phase === 'matchOver' ? 'over' : 'playing'; },
+  });
   render();
   connect();
 })();

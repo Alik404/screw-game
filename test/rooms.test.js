@@ -481,3 +481,94 @@ test('unknown room returns code NO_ROOM so the client can explain a lost room', 
   const e = h.conn().say({ type: 'join_room', code: 'ZZZZ', name: 'x', playerId: 'old-secret' }).last('error');
   assert.equal(e.code, 'NO_ROOM');
 });
+
+// ---------- ending and leaving a room ----------
+
+test('close_room: host only; everyone goes home, the code stops working and says why', () => {
+  const L = lobby(3);
+  const secret = L.others[0].last('joined').playerId;
+  L.others[0].say({ type: 'close_room' });
+  assert.match(L.others[0].last('error').message, /للمضيف/);
+  assert.ok(L.h.R.rooms.has(L.code));
+
+  L.host.say({ type: 'close_room' });
+  const host = L.host.last('joined').you;
+  L.all.forEach((c) => {
+    const m = c.last('room_closed');
+    assert.equal(m.by, host);
+    assert.equal(m.name, 'أحمد');
+    assert.match(m.text, /أحمد/);
+    assert.equal(c.room, null);
+  });
+  assert.equal(L.h.R.rooms.has(L.code), false);
+  assert.equal(L.h.clock.pending(), 0, 'no clock left behind');
+
+  // someone who was away comes back with the old seat: told the host ended it
+  const late = L.h.conn().say({ type: 'join_room', code: L.code, name: 'لاعب1', playerId: secret }).last('error');
+  assert.equal(late.code, 'ROOM_CLOSED');
+  assert.match(late.message, /أحمد/);
+  // much later the code is simply unknown
+  L.h.clock.advance((CONFIG.ROOM_IDLE_MINUTES + 1) * 60 * 1000);
+  assert.equal(L.h.conn().say({ type: 'join_room', code: L.code, name: 'x' }).last('error').code, 'NO_ROOM');
+
+  // the same connections can start over, and a late socket close does nothing
+  L.others[1].drop();
+  L.host.say({ type: 'create_room', name: 'أحمد' });
+  assert.notEqual(L.host.last('joined').code, L.code);
+});
+
+test('close_room during a game stops every clock, computer players and all', () => {
+  const h = harness();
+  const host = h.conn().say({ type: 'create_room', name: 'أحمد', game: 'bank' });
+  host.say({ type: 'add_bot' }).say({ type: 'start_game' });
+  assert.ok(host.last('game_state'));
+  assert.ok(h.clock.pending() > 0);
+  host.say({ type: 'close_room' });
+  assert.equal(h.clock.pending(), 0);
+  const n = host.inbox.length;
+  h.clock.advance(10 * 60 * 1000);
+  assert.equal(host.inbox.length, n, 'nothing arrives after the end');
+});
+
+test('leave_room: in the lobby the seat is freed at once; a leaving host hands the room on', () => {
+  const L = lobby(3);
+  const [a, b] = L.others;
+  a.say({ type: 'leave_room' });
+  assert.ok(a.last('left_room'));
+  assert.equal(a.room, null);
+  assert.equal(L.host.last('player_left').name, 'لاعب1');
+  assert.equal(L.host.last('room_state').players.length, 2);
+  // back in by code, as a new player
+  a.say({ type: 'join_room', code: L.code, name: 'لاعب1' });
+  assert.equal(L.host.last('room_state').players.length, 3);
+
+  L.host.say({ type: 'leave_room' });
+  const rs = b.last('room_state');
+  assert.equal(rs.players.length, 2);
+  assert.equal(rs.hostId, b.last('joined').you, 'the oldest player still here is the host now');
+});
+
+test('leave_room during a game: the seat stays, shown as away, and is played for them', () => {
+  const L = started(2);
+  const leaver = L.others[0];
+  const seat = leaver.last('joined').you;
+  leaver.say({ type: 'leave_room' });
+  assert.ok(leaver.last('left_room'));
+  const gs = L.host.last('game_state');
+  assert.equal(gs.roster.find((p) => p.id === seat).connected, false);
+  // their turns come on the short "away" clock, and the game moves on
+  let played = 0;
+  for (let i = 0; i < 200 && played < 3; i++) {
+    const g = L.host.last('game_state');
+    if (g.phase === 'turn' && g.currentPlayerId === seat) {
+      assert.equal(g.timers[0].kind, 'away');
+      L.h.clock.advance(CONFIG.AWAY_SECONDS * 1000 + 50);
+      assert.notEqual(L.host.last('game_state').currentPlayerId, seat);
+      played += 1;
+    } else L.h.clock.advance(5 * 1000);
+  }
+  assert.equal(played, 3);
+  // and the one who left can make a new room right away
+  leaver.say({ type: 'create_room', name: 'لاعب1' });
+  assert.ok(leaver.room);
+});
